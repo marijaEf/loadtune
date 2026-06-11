@@ -19,7 +19,7 @@ class Trial:
 
     @property
     def ok(self) -> bool:
-        return bool(self.result) and "error" not in self.result
+        return bool(self.result) and not self.result.get("error")
 
     @property
     def throughput(self) -> float:

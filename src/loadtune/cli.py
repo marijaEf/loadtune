@@ -31,14 +31,14 @@ def cmd_profile(args: argparse.Namespace) -> int:
     print(f"[loadtune] profiling {args.workload} with {knobs.label()} ...")
     result = run_trial(args.workload, knobs, args.steps, args.warmup)
     print(json.dumps(result, indent=2))
-    return 0 if "error" not in result else 1
+    return 0 if not result.get("error") else 1
 
 
 def cmd_tune(args: argparse.Namespace) -> int:
     baseline_knobs = Knobs(num_workers=args.workers, batch_size=args.batch_size)
     print(f"[loadtune] baseline run: {baseline_knobs.label()} ...")
     baseline_dict = run_trial(args.workload, baseline_knobs, args.steps, args.warmup)
-    if "error" in baseline_dict:
+    if baseline_dict.get("error"):
         print("[loadtune] baseline failed:\n" + str(baseline_dict["error"]))
         return 1
     baseline = ProfileResult(**baseline_dict)
