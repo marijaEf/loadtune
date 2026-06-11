@@ -15,7 +15,21 @@ baseline profile ──▶ brain (diagnosis + experiment plan) ──▶ trials 
         CPU util, step-time percentiles
 ```
 
-Every proposed config is **verified by measurement**, never just suggested. The report shows throughput per trial, speedup vs baseline, and why each config was tried.
+Every proposed config is **verified by measurement**, never just suggested. The report shows throughput per trial, speedup vs baseline, why each config was tried, and charts of where each step's time goes.
+
+## The tuning methodology
+
+![Structured tuning loop](docs/tuning-loop.svg)
+
+Many knobs can affect training throughput, but searching their joint space is intractable and unnecessary. loadtune follows a **bottleneck-driven loop** instead:
+
+1. **Profile** — a short instrumented run splits every step into *data wait* (accelerator idle) vs *compute*.
+2. **Classify the bottleneck** — input-bound, compute-bound, or transfer/memory-bound. Only the matching knob family enters the search; tuning `torch.compile` on an input-bound job is wasted effort.
+3. **Trial candidates** — short, subprocess-isolated runs measure each proposal. Within a family, independent knobs get coordinate descent; interacting knobs (e.g. `num_workers` × intra-op threads) are trialed jointly — where the LLM brain prunes the grid by reasoning about the hardware.
+4. **Adopt the cheapest config within noise tolerance** of the best throughput — `num_workers=2` beats `num_workers=8` when they're statistically tied.
+5. **Re-profile and repeat** — removing one bottleneck exposes the next (a job that was 49% input-bound becomes compute-bound once workers saturate the pipeline). Stop when expected gain no longer justifies trial cost. Math-preserving knobs need only throughput; semantics-changing knobs (batch size, AMP) additionally gate on a fixed-step loss-parity check.
+
+v0.1 implements one iteration of this loop for the input-pipeline knob family; further families and multi-round tuning are on the roadmap.
 
 ## Install
 
@@ -80,8 +94,10 @@ Developed on an M2 Pro. Data-wait measurements use `torch.mps.synchronize()` so 
 
 - [ ] Phase 1: TorchBench-derived workloads on Apple Silicon (this repo)
 - [ ] Phase 2: NVIDIA DeepLearningExamples on cloud GPUs — agent vs expert-tuned configs
-- [ ] AMP / `torch.compile` knobs on CUDA
-- [ ] Accuracy-parity check (fixed-step loss comparison) in every report
+- [ ] Multi-round tuning: re-profile after adoption, switch knob families as the bottleneck moves
+- [ ] Compute-bound family: AMP, `torch.compile`, `channels_last`, fused optimizers (CUDA)
+- [ ] Joint knobs: `num_workers` × `torch.set_num_threads`, `non_blocking` copies
+- [ ] Accuracy-parity check (fixed-step loss comparison) for semantics-changing knobs
 - [ ] Auto-apply: patch the recommended config into the user's script
 
 ## License
