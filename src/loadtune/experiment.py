@@ -74,6 +74,19 @@ def run_trials(
     return trials
 
 
-def best_trial(trials: list[Trial]) -> Optional[Trial]:
+def best_trial(trials: list[Trial], noise_tol: float = 0.02) -> Optional[Trial]:
+    """Best = cheapest config within `noise_tol` of the top throughput.
+
+    Throughput differences under ~2% are measurement noise; among the
+    statistically tied winners, prefer fewer workers (less memory, fewer
+    idle processes). This is the "num_workers=2 instead of 8" rule.
+    """
     ok = [t for t in trials if t.ok]
-    return max(ok, key=lambda t: t.throughput) if ok else None
+    if not ok:
+        return None
+    top = max(t.throughput for t in ok)
+    contenders = [t for t in ok if t.throughput >= top * (1 - noise_tol)]
+    return min(
+        contenders,
+        key=lambda t: (t.knobs.num_workers, -t.throughput),
+    )
