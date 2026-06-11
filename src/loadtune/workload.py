@@ -37,11 +37,17 @@ def load_workload(path: str) -> Workload:
     p = Path(path).resolve()
     if not p.exists():
         raise FileNotFoundError(f"workload file not found: {path}")
-    spec = importlib.util.spec_from_file_location(f"loadtune_workload_{p.stem}", p)
+    # Import under the plain filename with its directory on sys.path.
+    # Crucial on macOS/Windows: DataLoader workers are *spawned* and must
+    # re-import this module by name to unpickle the dataset. sys.path is
+    # propagated to spawned children; a synthetic module name is not.
+    parent = str(p.parent)
+    if parent not in sys.path:
+        sys.path.insert(0, parent)
+    spec = importlib.util.spec_from_file_location(p.stem, p)
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
-    # Register so dataloader worker processes (spawn) can re-import it.
-    sys.modules[spec.name] = mod
+    sys.modules[p.stem] = mod
     spec.loader.exec_module(mod)
     if not hasattr(mod, "get_workload"):
         raise AttributeError(f"{path} must define get_workload() -> Workload")
