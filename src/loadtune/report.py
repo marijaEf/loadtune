@@ -14,6 +14,7 @@ def render_report(
     trials: list[Trial],
     brain_name: str,
     narrative: str,
+    plot_files: list[str] | None = None,
 ) -> str:
     best = best_trial(trials)
     lines = [
@@ -54,6 +55,12 @@ def render_report(
             err = (t.result or {}).get("error", "unknown")
             first = str(err).strip().splitlines()[-1][:80]
             lines.append(f"| `{t.knobs.label()}` | failed | — | — | {first} |")
+
+    if plot_files:
+        lines += ["", "## Charts", ""]
+        for f in plot_files:
+            lines.append(f"![{f}]({f})")
+            lines.append("")
 
     lines += ["", "## Verdict", ""]
     if best and baseline.throughput and best.throughput > baseline.throughput * 1.02:

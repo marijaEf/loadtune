@@ -59,9 +59,25 @@ def cmd_tune(args: argparse.Namespace) -> int:
 
     run_trials(args.workload, trials, args.steps, args.warmup, on_progress=progress)
 
-    narrative = brain.explain(baseline, trials)
-    report = render_report(baseline, trials, brain.name, narrative)
     out = Path(args.out)
+    plot_files: list[str] = []
+    if args.plots:
+        try:
+            from .plots import generate_plots
+
+            paths = generate_plots(
+                baseline, trials, best_trial(trials),
+                out_dir=out.parent if str(out.parent) else Path("."),
+                prefix=out.stem,
+            )
+            plot_files = [p.name for p in paths]
+            print(f"[loadtune] charts: {', '.join(plot_files)}")
+        except ImportError:
+            print("[loadtune] matplotlib not installed; skipping charts "
+                  "(pip install matplotlib)")
+
+    narrative = brain.explain(baseline, trials)
+    report = render_report(baseline, trials, brain.name, narrative, plot_files)
     out.write_text(report)
     print(f"[loadtune] report written to {out}")
 
@@ -93,6 +109,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_tune.add_argument("--max-trials", type=int, default=6)
     p_tune.add_argument("--out", default="loadtune_report.md")
+    p_tune.add_argument(
+        "--no-plots", dest="plots", action="store_false", default=True,
+        help="skip chart generation (on by default; needs matplotlib)",
+    )
     p_tune.set_defaults(fn=cmd_tune)
 
     args = parser.parse_args(argv)

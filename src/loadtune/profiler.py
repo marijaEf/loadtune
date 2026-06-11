@@ -60,6 +60,9 @@ class ProfileResult:
     step_time_p50_ms: float
     step_time_p90_ms: float
     cpu_util_mean: Optional[float]  # system-wide %, all cores
+    # Per measured step, in ms — used for plotting.
+    step_data_wait_ms: list[float] = field(default_factory=list)
+    step_compute_ms: list[float] = field(default_factory=list)
     error: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -102,6 +105,8 @@ def profile_session(
     data_wait = 0.0
     compute = 0.0
     step_times: list[float] = []
+    step_waits_ms: list[float] = []
+    step_computes_ms: list[float] = []
     cpu_samples: list[float] = []
     done = 0
     total_needed = warmup + steps
@@ -124,6 +129,8 @@ def profile_session(
             data_wait += t_got - t_fetch
             compute += t_done - t_got
             step_times.append((t_done - t_fetch) * 1000)
+            step_waits_ms.append(round((t_got - t_fetch) * 1000, 3))
+            step_computes_ms.append(round((t_done - t_got) * 1000, 3))
             if psutil and done % 5 == 0:
                 cpu_samples.append(psutil.cpu_percent(interval=None))
 
@@ -150,4 +157,6 @@ def profile_session(
         cpu_util_mean=(
             round(statistics.mean(cpu_samples), 1) if cpu_samples else None
         ),
+        step_data_wait_ms=step_waits_ms,
+        step_compute_ms=step_computes_ms,
     )
