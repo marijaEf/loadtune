@@ -48,6 +48,7 @@ class LLMBrain:
             return self._propose_llm(baseline, max_trials)
         except Exception as e:  # API error, bad JSON, missing key, ...
             print(f"[loadtune] LLM brain failed ({e!r}); falling back to heuristics")
+            self.name = "llm (failed; heuristic fallback)"
             return self._fallback.propose(baseline, max_trials)
 
     def _propose_llm(self, baseline: ProfileResult, max_trials: int) -> list[Trial]:
