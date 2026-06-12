@@ -24,12 +24,17 @@ def _add_common(p: argparse.ArgumentParser) -> None:
     p.add_argument("--warmup", type=int, default=10, help="warmup steps per trial")
     p.add_argument("--workers", type=int, default=0, help="baseline num_workers")
     p.add_argument("--batch-size", type=int, default=None, help="override batch size")
+    p.add_argument(
+        "--timeout", type=int, default=900,
+        help="per-trial timeout in seconds (first runs may download datasets)",
+    )
 
 
 def cmd_profile(args: argparse.Namespace) -> int:
     knobs = Knobs(num_workers=args.workers, batch_size=args.batch_size)
     print(f"[loadtune] profiling {args.workload} with {knobs.label()} ...")
-    result = run_trial(args.workload, knobs, args.steps, args.warmup)
+    result = run_trial(args.workload, knobs, args.steps, args.warmup,
+                       timeout_s=args.timeout)
     print(json.dumps(result, indent=2))
     return 0 if not result.get("error") else 1
 
@@ -37,7 +42,8 @@ def cmd_profile(args: argparse.Namespace) -> int:
 def cmd_tune(args: argparse.Namespace) -> int:
     baseline_knobs = Knobs(num_workers=args.workers, batch_size=args.batch_size)
     print(f"[loadtune] baseline run: {baseline_knobs.label()} ...")
-    baseline_dict = run_trial(args.workload, baseline_knobs, args.steps, args.warmup)
+    baseline_dict = run_trial(args.workload, baseline_knobs, args.steps, args.warmup,
+                              timeout_s=args.timeout)
     if baseline_dict.get("error"):
         print("[loadtune] baseline failed:\n" + str(baseline_dict["error"]))
         return 1
@@ -57,7 +63,8 @@ def cmd_tune(args: argparse.Namespace) -> int:
     def progress(i: int, n: int, t: Trial) -> None:
         print(f"[loadtune] trial {i + 1}/{n}: {t.knobs.label()}  ({t.reason})")
 
-    run_trials(args.workload, trials, args.steps, args.warmup, on_progress=progress)
+    run_trials(args.workload, trials, args.steps, args.warmup,
+               on_progress=progress, timeout_s=args.timeout)
 
     out = Path(args.out)
     plot_files: list[str] = []

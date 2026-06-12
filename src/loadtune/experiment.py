@@ -66,11 +66,14 @@ def run_trials(
     steps: int,
     warmup: int,
     on_progress=None,
+    timeout_s: int = 900,
 ) -> list[Trial]:
     for i, trial in enumerate(trials):
         if on_progress:
             on_progress(i, len(trials), trial)
-        trial.result = run_trial(workload_path, trial.knobs, steps, warmup)
+        trial.result = run_trial(
+            workload_path, trial.knobs, steps, warmup, timeout_s=timeout_s
+        )
     return trials
 
 
