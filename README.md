@@ -58,10 +58,12 @@ loadtune tune workloads/resnet50_cifar.py --steps 100 --out resnet_report.md
 
 **Synthetic input-bound workload** (small CNN, deliberately heavy CPU augmentation) — the stress case:
 
-| | baseline `workers=0` | tuned |
+| | baseline `workers=0` | tuned `workers=2` |
 |---|---|---|
-| throughput | 3,994 samples/s | **8,642 samples/s (2.16x)** |
-| data wait | 48% of step time | 2.5% |
+| throughput | 4,017 samples/s | **8,479 samples/s (2.11x)** |
+| data wait | 48% of step time | 2.6% |
+
+*(medians of 3 runs; full spreads in [results/synthetic_repeats.md](results/synthetic_repeats.md))*
 
 **ResNet-50 on CIFAR-10** (224px, heavy augmentation) — the realistic case:
 
@@ -76,7 +78,7 @@ The ResNet result is the validating one: the profile measured an 11% data-wait f
 
 *The red band is time the accelerator spends idle, waiting for data. Two DataLoader workers remove it entirely; what remains is pure compute.*
 
-A replication note: on the synthetic workload, single-trial differences between configs on the ~8,600 samples/s plateau (±4%) did not replicate across runs — only the 2x worker effect is robust. Headline numbers should come from repeated measurements (`--repeats`).
+A replication note: on the synthetic workload, single-trial differences between configs on the ~8,500 samples/s plateau did not replicate — with `--repeats 3`, all configs beyond `workers=2` have overlapping spreads, and an apparent thread-contention effect from a single early run turned out to be noise. The verdict logic therefore picks the cheapest statistically-tied config, and headline numbers come from repeated measurements.
 
 ## Choosing the brain
 
