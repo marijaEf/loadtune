@@ -84,7 +84,9 @@ def get_workload() -> Workload:
 
 ## Knobs tuned in v1
 
-`num_workers`, `prefetch_factor`, `persistent_workers`, `pin_memory` (CUDA only — it's a no-op on Apple Silicon's unified memory), and optionally `batch_size`.
+`num_workers`, `prefetch_factor`, `persistent_workers`, `pin_memory` (CUDA only — it's a no-op on Apple Silicon's unified memory), `num_threads` (intra-op threads, trialed jointly with worker counts since they compete for cores), and optionally `batch_size`.
+
+The heuristic brain's rules, beyond the worker sweep: a **CPU-saturation guard** (input-bound + cores maxed → more workers can't help; the diagnosis says so instead of proposing futile trials), a **jitter rule** (p90/p50 step time ≥ 1.5 with active workers → deeper prefetch to absorb stragglers), and **worker×thread pairing** (4+ workers → paired trial capping main-process intra-op threads to the leftover cores).
 
 ## Notes for Apple Silicon (MPS)
 

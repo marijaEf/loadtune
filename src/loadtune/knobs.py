@@ -46,6 +46,13 @@ KNOB_SPECS: dict[str, KnobSpec] = {
         "explicitly allowed.",
         candidates=None,
     ),
+    "num_threads": KnobSpec(
+        "num_threads",
+        "Intra-op CPU threads for the main process (torch.set_num_threads). "
+        "Competes with DataLoader workers for cores; cap it when many "
+        "workers are active. None = torch default (all cores).",
+        candidates=None,  # derived from cpu_count and num_workers
+    ),
 }
 
 
@@ -58,6 +65,7 @@ class Knobs:
     persistent_workers: bool = False
     pin_memory: bool = False
     batch_size: Optional[int] = None  # None -> workload default
+    num_threads: Optional[int] = None  # None -> torch default (all cores)
 
     def loader_kwargs(self) -> dict[str, Any]:
         kw: dict[str, Any] = {
@@ -92,6 +100,8 @@ class Knobs:
             parts.append("pin")
         if self.batch_size is not None:
             parts.append(f"bs={self.batch_size}")
+        if self.num_threads is not None:
+            parts.append(f"threads={self.num_threads}")
         return ", ".join(parts)
 
 

@@ -78,6 +78,8 @@ def profile_session(
 ) -> ProfileResult:
     """Run `warmup + steps` training steps under `knobs` and measure."""
     torch.manual_seed(seed)
+    if knobs.num_threads is not None:
+        torch.set_num_threads(max(1, knobs.num_threads))
     device = pick_device()
     num_cpus = os.cpu_count() or 1
     batch_size = knobs.batch_size or workload.default_batch_size

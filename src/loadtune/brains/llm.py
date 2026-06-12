@@ -84,6 +84,8 @@ class LLMBrain:
             if knobs.num_workers == 0:
                 knobs.prefetch_factor = None
                 knobs.persistent_workers = False
+            if knobs.num_threads is not None:
+                knobs.num_threads = max(1, min(knobs.num_threads, baseline.num_cpus))
             trials.append(Trial(knobs, reason=t.get("reason", "LLM proposal")))
         return trials
 
