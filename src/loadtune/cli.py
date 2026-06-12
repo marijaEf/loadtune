@@ -90,6 +90,15 @@ def cmd_tune(args: argparse.Namespace) -> int:
     out.write_text(report)
     print(f"[loadtune] report written to {out}")
 
+    if args.html:
+        from .report_html import render_html_report
+
+        html_out = out.with_suffix(".html")
+        html_out.write_text(
+            render_html_report(baseline, trials, brain.name, narrative)
+        )
+        print(f"[loadtune] interactive report written to {html_out}")
+
     best = best_trial(trials)
     if best and best.throughput > baseline.throughput:
         print(
@@ -125,6 +134,10 @@ def main(argv: list[str] | None = None) -> int:
     p_tune.add_argument(
         "--no-plots", dest="plots", action="store_false", default=True,
         help="skip chart generation (on by default; needs matplotlib)",
+    )
+    p_tune.add_argument(
+        "--html", action="store_true",
+        help="also write a self-contained interactive HTML report",
     )
     p_tune.set_defaults(fn=cmd_tune)
 
