@@ -48,7 +48,13 @@ def run_trial(
             cmd, capture_output=True, text=True, timeout=timeout_s
         )
     except subprocess.TimeoutExpired:
-        return {"error": f"trial timed out after {timeout_s}s"}
+        return {
+            "error": (
+                f"trial timed out after {timeout_s}s (first runs may be "
+                f"downloading datasets/models — pre-download them or raise "
+                f"--timeout)"
+            )
+        }
 
     for line in reversed(proc.stdout.splitlines()):
         if line.startswith("LOADTUNE_RESULT "):

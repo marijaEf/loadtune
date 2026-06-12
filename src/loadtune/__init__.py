@@ -5,7 +5,7 @@ diagnoses input-pipeline bottlenecks, and runs short experiments to find
 better DataLoader / training configs (e.g. num_workers=2 instead of 4).
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from .knobs import Knobs, KNOB_SPECS
 from .workload import Workload

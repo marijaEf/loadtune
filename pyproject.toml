@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "loadtune"
-version = "0.1.0"
+version = "0.2.0"
 description = "Agentic profiler & tuner for ML training workloads — finds the DataLoader config your GPU was waiting for."
 readme = "README.md"
 requires-python = ">=3.10"
