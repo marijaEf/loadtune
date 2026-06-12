@@ -57,10 +57,21 @@ class LLMBrain:
         knob_docs = "\n".join(
             f"- {s.name}: {s.description}" for s in KNOB_SPECS.values()
         )
+        ceiling = 1.0 / max(1e-6, 1.0 - baseline.data_wait_frac)
+        profile = baseline.to_dict()
+        # Step series are large and add nothing to the diagnosis.
+        profile.pop("step_data_wait_ms", None)
+        profile.pop("step_compute_ms", None)
         user_msg = (
-            f"Baseline profile:\n{json.dumps(baseline.to_dict(), indent=2)}\n\n"
+            f"Baseline profile:\n{json.dumps(profile, indent=2)}\n\n"
             f"Sensible num_workers values for this machine: "
             f"{worker_candidates(baseline.num_cpus)}\n"
+            f"The data-wait fraction bounds the input-side speedup at "
+            f"~{ceiling:.2f}x — no input-pipeline config can beat that.\n"
+            f"Budget trials to the opportunity: if the ceiling is below "
+            f"~1.2x, one or two trials suffice to claim it; propose more "
+            f"only where the profile leaves real uncertainty about which "
+            f"config wins. Each trial costs a full measured run.\n"
             f"Propose at most {max_trials} trials, most promising first. "
             f"Do not re-propose the baseline config."
         )
