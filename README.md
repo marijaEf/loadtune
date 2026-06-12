@@ -1,6 +1,6 @@
 # loadtune
 
-**Agentic profiler & tuner for ML training workloads.** loadtune profiles your training loop, splits every step into *data wait* vs *compute*, diagnoses input-pipeline bottlenecks, and runs short isolated experiments to find a better config — for example proposing `num_workers=2` instead of `num_workers=4` when the extra workers are pure overhead.
+**Agentic profiler & tuner for ML training workloads — every recommendation is a measured experiment, not a suggestion.** loadtune profiles your training loop, splits every step into *data wait* vs *compute*, diagnoses input-pipeline bottlenecks, and runs short isolated experiments to find a better config — for example proposing `num_workers=2` instead of `num_workers=4` when the extra workers are pure overhead. The experiment-planning "brain" is swappable: deterministic heuristics or Claude-API reasoning, with [a running comparison of which wins where](#heuristic-vs-llm-brain).
 
 Born out of a master-thesis pain: hand-tuning dataloaders is slow, boring, and machine-specific. So it got automated.
 
@@ -137,13 +137,17 @@ Developed on an M2 Pro. Data-wait measurements use `torch.mps.synchronize()` so 
 
 ## Roadmap
 
-- [ ] Phase 1: TorchBench-derived workloads on Apple Silicon (this repo)
-- [ ] Phase 2: NVIDIA DeepLearningExamples on cloud GPUs — agent vs expert-tuned configs
+- [x] Phase 1: input-pipeline tuning on Apple Silicon, validated on synthetic + ResNet-50/CIFAR-10 (see [Results](#results-phase-1-apple-m2-pro-10-cores-mps))
 - [x] Repeated measurements: `--repeats N` reports median throughput with min–max spread
-- [ ] Multi-round tuning: re-profile after adoption, switch knob families as the bottleneck moves
+- [x] Heuristic vs LLM brain comparison, incl. ceiling-aware trial budgeting in the LLM prompt
+- [x] Joint knobs, first instance: `num_workers` × `torch.set_num_threads`
+- [x] Interactive HTML report (`--html`)
+- [ ] Phase 2: NVIDIA DeepLearningExamples on cloud GPUs — agent vs expert-tuned configs
 - [ ] Compute-bound family: AMP, `torch.compile`, `channels_last`, fused optimizers (CUDA)
-- [ ] Joint knobs: `num_workers` × `torch.set_num_threads`, `non_blocking` copies
+- [ ] Multi-round tuning: re-profile after adoption, switch knob families as the bottleneck moves
+- [ ] `non_blocking` copies knob (CUDA, pairs with pin_memory)
 - [ ] Accuracy-parity check (fixed-step loss comparison) for semantics-changing knobs
+- [ ] Persist raw trial data (`--save-raw`) so reports can be regenerated without re-running
 - [ ] Auto-apply: patch the recommended config into the user's script
 
 ## License
