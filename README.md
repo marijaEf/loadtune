@@ -91,7 +91,9 @@ Both brains tuned ResNet-50/CIFAR-10 from the same baseline ([heuristic report](
 | diagnosis | one threshold rule | multi-signal: low CPU + moderate wait → *serial* loading, not CPU shortage; knew pin_memory is a no-op on unified memory |
 | knob interactions | hand-written worker×thread rule | paired every worker count with a complementary thread cap, unprompted |
 
-Takeaway so far: with one dominant signal and a hard ceiling (the 11% data-wait fraction bounds the win at ~1.12x), rules are cheaper and equally effective. The LLM's value showed in explanation quality and in handling knob interactions without bespoke rules — and its main weakness (over-exploring a capped space) is a prompt fix: pass the computed speedup ceiling and ask it to budget trials accordingly.
+Takeaway so far: with one dominant signal and a hard ceiling (the 11% data-wait fraction bounds the win at ~1.12x), rules are cheaper and equally effective. The LLM's value showed in explanation quality and in handling knob interactions without bespoke rules — and its main weakness (over-exploring a capped space) turned out to be a prompt fix.
+
+**The fix, measured:** after passing the computed speedup ceiling into the prompt with trial-budget guidance, the LLM consistently drops from 6 trials to 2 across re-runs — one primary proposal plus one cheap alternative — and its diagnosis reasons from the ceiling directly ("the input pipeline ceiling is ~1.12x... gains will be limited", [v2 report](results/resnet50_llm_v2.md)). Measured result lands on the ceiling each time (1.13–1.15x, within run-to-run noise).
 
 ## Choosing the brain
 
@@ -101,7 +103,9 @@ loadtune tune <workload> --brain llm         # Claude reasons over the profile
 loadtune tune <workload> --brain auto        # llm if ANTHROPIC_API_KEY is set
 ```
 
-The LLM brain (set `ANTHROPIC_API_KEY`) receives the baseline profile and hardware context, returns a diagnosis and an experiment plan as JSON, and is sandboxed by guardrails (invalid configs are clamped; any API failure falls back to heuristics). `LOADTUNE_LLM_MODEL` overrides the model.
+The LLM brain (set `ANTHROPIC_API_KEY`, `pip install anthropic`) receives the baseline profile, hardware context, and the computed input-side speedup ceiling — so it budgets trials to the opportunity instead of over-exploring a capped space. It returns a diagnosis and an experiment plan as JSON, sandboxed by guardrails (invalid configs are clamped; any API failure falls back to heuristics and is labeled as such in the report). `LOADTUNE_LLM_MODEL` overrides the model.
+
+Add `--html` to any tune run to also get a self-contained interactive report (hover tooltips, spread bars from `--repeats`) you can share as a single file.
 
 ## Writing your own workload
 

@@ -127,7 +127,9 @@ def render_html_report(
 <tbody>{''.join(rows)}</tbody></table>
 <div class="verdict">{verdict}</div>
 <h2>Throughput by config</h2><div id="bar" class="chart"></div>
-<h2>Step timeline</h2><div id="tl" class="chart"></div>
+<h2>Step timeline</h2>
+<div id="tl_base" class="chart"></div>
+<div id="tl_best" class="chart"></div>
 <script>
 const D = {payload};
 const err = D.bar.hi.map((h, i) => h == null ? 0 : h - D.bar.thr[i]);
@@ -137,24 +139,29 @@ Plotly.newPlot("bar", [{{
   error_y: {{type: "data", array: err, arrayminus: errm, visible: true}}
 }}], {{margin: {{t: 10}}, yaxis: {{title: "samples/s"}}}}, {{displayModeBar: false, responsive: true}});
 
-const steps = D.timeline.base_wait.map((_, i) => i + 1);
-const traces = [
-  {{x: steps, y: D.timeline.base_comp, stackgroup: "b", name: "baseline compute",
-    line: {{color: "#4878a8"}}}},
-  {{x: steps, y: D.timeline.base_wait, stackgroup: "b", name: "baseline data wait",
-    line: {{color: "#d9534f"}}}},
-];
-if (D.timeline.best_label) {{
-  traces.push(
-    {{x: steps, y: D.timeline.best_comp, stackgroup: "t", name: "tuned compute",
-      line: {{color: "#9bb8d4"}}}},
-    {{x: steps, y: D.timeline.best_wait, stackgroup: "t", name: "tuned data wait",
-      line: {{color: "#eba8a5"}}}}
-  );
+const totals = (w, c) => w.map((v, i) => v + c[i]);
+const ymax = 1.05 * Math.max(
+  ...totals(D.timeline.base_wait, D.timeline.base_comp),
+  ...(D.timeline.best_label
+      ? totals(D.timeline.best_wait, D.timeline.best_comp) : [0])
+);
+function stacked(div, wait, comp, title) {{
+  const steps = wait.map((_, i) => i + 1);
+  Plotly.newPlot(div, [
+    {{x: steps, y: comp, stackgroup: "s", name: "compute",
+      line: {{color: "#4878a8"}}}},
+    {{x: steps, y: wait, stackgroup: "s", name: "data wait",
+      line: {{color: "#d9534f"}}}},
+  ], {{margin: {{t: 32}}, height: 260, title: {{text: title, font: {{size: 13}}}},
+      xaxis: {{title: "step"}}, yaxis: {{title: "ms", range: [0, ymax]}}}},
+    {{displayModeBar: false, responsive: true}});
 }}
-Plotly.newPlot("tl", traces, {{margin: {{t: 10}},
-  xaxis: {{title: "step"}}, yaxis: {{title: "ms"}}}},
-  {{displayModeBar: false, responsive: true}});
+stacked("tl_base", D.timeline.base_wait, D.timeline.base_comp,
+        "baseline: " + D.timeline.base_label);
+if (D.timeline.best_label) {{
+  stacked("tl_best", D.timeline.best_wait, D.timeline.best_comp,
+          "tuned: " + D.timeline.best_label);
+}}
 </script>
 </body></html>
 """

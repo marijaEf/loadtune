@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<title>loadtune — resnet50_cifar10</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+body { font-family: -apple-system, Segoe UI, Helvetica, Arial, sans-serif;
+       max-width: 980px; margin: 2rem auto; padding: 0 1rem; color: #1c2733; }
+h1 { font-size: 1.5rem; } h2 { font-size: 1.15rem; margin-top: 2rem; }
+.meta { color: #5f6b7a; font-size: 0.9rem; }
+.stats { display: flex; gap: 2rem; flex-wrap: wrap; margin: 1rem 0; }
+.stat .v { font-size: 1.4rem; font-weight: 600; }
+.stat .k { color: #5f6b7a; font-size: 0.85rem; }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #e3e8ee; }
+th { color: #5f6b7a; font-weight: 600; }
+td.cfg { font-family: ui-monospace, Menlo, monospace; white-space: nowrap; }
+tr.best { background: #f0f7f0; }
+.verdict { background: #f0f7f0; border-left: 4px solid #5a9a5a;
+           padding: 0.75rem 1rem; margin-top: 1.5rem; }
+.chart { margin-top: 1rem; }
+</style></head><body>
+<h1>loadtune report — resnet50_cifar10</h1>
+<p class="meta">2026-06-12 18:16 · device <code>mps</code> ·
+10 CPUs · brain <code>llm</code> ·
+50 steps/trial</p>
+<h2>Diagnosis</h2><p>Data wait is only 11% of total time, meaning compute dominates and the input pipeline ceiling is ~1.12x. The main process is loading data (num_workers=0) with low CPU utilization (13.2%), and on MPS pin_memory is a no-op. A small number of workers with prefetching may absorb the modest data stall, but gains will be limited.</p>
+<div class="stats">
+<div class="stat"><div class="v">67.9</div><div class="k">baseline samples/s</div></div>
+<div class="stat"><div class="v">11.1%</div><div class="k">baseline data wait</div></div>
+<div class="stat"><div class="v">469.2 ms</div><div class="k">step p50</div></div>
+<div class="stat"><div class="v">1.12x</div><div class="k">input-side ceiling</div></div>
+</div>
+<h2>Trials</h2>
+<table><thead><tr><th>config</th><th>samples/s</th><th>vs baseline</th>
+<th>data wait</th><th>proposed because</th></tr></thead>
+<tbody><tr><td class='cfg'>workers=4, prefetch=2, persistent, threads=4</td><td>77.7</td><td>1.14x</td><td>0.1%</td><td>4 workers should overlap data loading with compute to eliminate the ~11% data wait. persistent_workers avoids re-spawning overhead between epochs. num_threads capped at 4 to avoid CPU contention with workers. Best single trial to claim the available headroom.</td></tr><tr class="best"><td class='cfg'>workers=2, prefetch=2, persistent, threads=6</td><td>78.3</td><td>1.15x</td><td>0.1%</td><td>Lighter worker count (2) in case 4 workers introduces spawn/IPC overhead that outweighs benefits given the small data-wait fraction. More threads left for compute.</td></tr></tbody></table>
+<div class="verdict">Recommended config: <code>workers=2, prefetch=2, persistent, threads=6</code> — <b>1.15x</b> baseline throughput (67.9 → 78.3 samples/s).</div>
+<h2>Throughput by config</h2><div id="bar" class="chart"></div>
+<h2>Step timeline</h2>
+<div id="tl_base" class="chart"></div>
+<div id="tl_best" class="chart"></div>
+<script>
+const D = {"bar": {"labels": ["baseline: workers=0", "workers=4, prefetch=2, persistent, threads=4", "workers=2, prefetch=2, persistent, threads=6"], "thr": [67.94, 77.72, 78.35], "lo": [67.94, 77.72, 78.35], "hi": [67.94, 77.72, 78.35]}, "timeline": {"base_label": "workers=0", "base_wait": [51.347, 49.384, 50.971, 52.88, 52.923, 62.981, 57.189, 50.102, 51.502, 52.22, 49.117, 51.413, 49.324, 52.183, 50.055, 49.792, 48.962, 49.978, 52.09, 61.925, 56.983, 52.709, 49.165, 48.598, 58.866, 50.742, 54.942, 54.802, 52.173, 52.001, 51.4, 53.807, 53.86, 49.372, 51.518, 54.928, 50.75, 50.388, 50.682, 50.515, 49.94, 50.533, 51.092, 53.49, 52.422, 54.09, 48.857, 53.141, 50.049, 53.441], "base_comp": [422.534, 415.662, 436.191, 412.626, 416.103, 417.278, 427.495, 413.263, 414.626, 415.854, 414.746, 407.047, 420.385, 418.922, 419.801, 414.442, 420.548, 418.688, 425.595, 418.453, 408.447, 411.372, 421.93, 417.163, 413.589, 413.863, 429.538, 430.464, 427.763, 420.822, 424.124, 431.431, 424.943, 431.962, 414.197, 422.036, 414.794, 415.719, 415.398, 415.41, 416.982, 415.654, 407.69, 414.204, 414.645, 419.131, 420.478, 420.539, 422.003, 413.541], "best_label": "workers=2, prefetch=2, persistent, threads=6", "best_wait": [0.529, 0.411, 0.394, 0.387, 0.358, 0.391, 0.399, 0.423, 0.464, 0.393, 0.387, 0.396, 0.465, 0.45, 0.372, 0.399, 0.41, 0.395, 0.395, 0.715, 0.454, 0.418, 0.453, 0.468, 0.418, 0.497, 0.377, 0.402, 0.433, 0.43, 0.384, 0.426, 0.426, 0.448, 0.428, 0.41, 0.435, 0.407, 0.422, 0.424, 0.441, 0.421, 0.411, 0.551, 0.575, 0.427, 0.431, 0.409, 0.403, 0.429], "best_comp": [408.468, 408.079, 408.265, 407.896, 407.754, 408.197, 408.292, 407.755, 408.075, 407.075, 406.952, 407.849, 408.002, 409.638, 409.337, 408.473, 407.481, 408.679, 408.53, 408.319, 407.484, 407.752, 407.531, 407.9, 408.515, 409.005, 408.866, 407.79, 408.161, 407.563, 408.162, 407.386, 407.575, 408.229, 407.846, 407.592, 407.536, 407.508, 407.643, 407.439, 407.127, 407.973, 409.384, 408.564, 408.394, 407.089, 408.122, 407.655, 407.775, 407.068]}};
+const err = D.bar.hi.map((h, i) => h == null ? 0 : h - D.bar.thr[i]);
+const errm = D.bar.lo.map((l, i) => l == null ? 0 : D.bar.thr[i] - l);
+Plotly.newPlot("bar", [{
+  x: D.bar.labels, y: D.bar.thr, type: "bar", marker: {color: "#4878a8"},
+  error_y: {type: "data", array: err, arrayminus: errm, visible: true}
+}], {margin: {t: 10}, yaxis: {title: "samples/s"}}, {displayModeBar: false, responsive: true});
+
+const totals = (w, c) => w.map((v, i) => v + c[i]);
+const ymax = 1.05 * Math.max(
+  ...totals(D.timeline.base_wait, D.timeline.base_comp),
+  ...(D.timeline.best_label
+      ? totals(D.timeline.best_wait, D.timeline.best_comp) : [0])
+);
+function stacked(div, wait, comp, title) {
+  const steps = wait.map((_, i) => i + 1);
+  Plotly.newPlot(div, [
+    {x: steps, y: comp, stackgroup: "s", name: "compute",
+      line: {color: "#4878a8"}},
+    {x: steps, y: wait, stackgroup: "s", name: "data wait",
+      line: {color: "#d9534f"}},
+  ], {margin: {t: 32}, height: 260, title: {text: title, font: {size: 13}},
+      xaxis: {title: "step"}, yaxis: {title: "ms", range: [0, ymax]}},
+    {displayModeBar: false, responsive: true});
+}
+stacked("tl_base", D.timeline.base_wait, D.timeline.base_comp,
+        "baseline: " + D.timeline.base_label);
+if (D.timeline.best_label) {
+  stacked("tl_best", D.timeline.best_wait, D.timeline.best_comp,
+          "tuned: " + D.timeline.best_label);
+}
+</script>
+</body></html>
