@@ -64,6 +64,11 @@ class ProfileResult:
     step_data_wait_ms: list[float] = field(default_factory=list)
     step_compute_ms: list[float] = field(default_factory=list)
     error: Optional[str] = None
+    # Set when a config is measured multiple times (--repeats): the rest of
+    # the fields then come from the median-throughput run.
+    repeats: int = 1
+    throughput_min: Optional[float] = None
+    throughput_max: Optional[float] = None
 
     def to_dict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)

@@ -30,7 +30,13 @@ def render_report(
         "## Baseline",
         "",
         f"- config: `{Knobs.from_dict(baseline.knobs).label()}`",
-        f"- throughput: **{baseline.throughput:.1f} samples/s**",
+        f"- throughput: **{baseline.throughput:.1f} samples/s**"
+        + (
+            f" (median of {baseline.repeats}, "
+            f"{baseline.throughput_min:.1f}–{baseline.throughput_max:.1f})"
+            if baseline.repeats > 1 and baseline.throughput_min is not None
+            else ""
+        ),
         f"- data wait: {baseline.data_wait_frac:.1%} of step time "
         f"({baseline.data_wait_s:.2f}s of {baseline.total_s:.2f}s over "
         f"{baseline.steps} steps)",
@@ -47,8 +53,11 @@ def render_report(
         if t.ok:
             r = t.result
             speedup = r["throughput"] / baseline.throughput if baseline.throughput else 0
+            thr = f"{r['throughput']:.1f}"
+            if r.get("repeats", 1) > 1 and r.get("throughput_min") is not None:
+                thr += f" ({r['throughput_min']:.1f}–{r['throughput_max']:.1f})"
             lines.append(
-                f"| `{t.knobs.label()}` | {r['throughput']:.1f} | "
+                f"| `{t.knobs.label()}` | {thr} | "
                 f"{speedup:.2f}x | {r['data_wait_frac']:.1%} | {t.reason} |"
             )
         else:

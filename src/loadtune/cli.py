@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 from .brains import make_brain
-from .experiment import Trial, best_trial, run_trial, run_trials
+from .experiment import Trial, best_trial, run_trial, run_trial_repeated, run_trials
 from .knobs import Knobs
 from .profiler import ProfileResult
 from .report import render_report
@@ -42,8 +42,9 @@ def cmd_profile(args: argparse.Namespace) -> int:
 def cmd_tune(args: argparse.Namespace) -> int:
     baseline_knobs = Knobs(num_workers=args.workers, batch_size=args.batch_size)
     print(f"[loadtune] baseline run: {baseline_knobs.label()} ...")
-    baseline_dict = run_trial(args.workload, baseline_knobs, args.steps, args.warmup,
-                              timeout_s=args.timeout)
+    baseline_dict = run_trial_repeated(args.workload, baseline_knobs, args.steps,
+                                       args.warmup, timeout_s=args.timeout,
+                                       repeats=args.repeats)
     if baseline_dict.get("error"):
         print("[loadtune] baseline failed:\n" + str(baseline_dict["error"]))
         return 1
@@ -64,7 +65,8 @@ def cmd_tune(args: argparse.Namespace) -> int:
         print(f"[loadtune] trial {i + 1}/{n}: {t.knobs.label()}  ({t.reason})")
 
     run_trials(args.workload, trials, args.steps, args.warmup,
-               on_progress=progress, timeout_s=args.timeout)
+               on_progress=progress, timeout_s=args.timeout,
+               repeats=args.repeats)
 
     out = Path(args.out)
     plot_files: list[str] = []
@@ -115,6 +117,10 @@ def main(argv: list[str] | None = None) -> int:
         help="auto = llm if ANTHROPIC_API_KEY is set, else heuristic",
     )
     p_tune.add_argument("--max-trials", type=int, default=6)
+    p_tune.add_argument(
+        "--repeats", type=int, default=1,
+        help="measure each config N times; report median with min–max spread",
+    )
     p_tune.add_argument("--out", default="loadtune_report.md")
     p_tune.add_argument(
         "--no-plots", dest="plots", action="store_false", default=True,

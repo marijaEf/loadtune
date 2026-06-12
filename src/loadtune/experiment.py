@@ -60,6 +60,32 @@ def run_trial(
     }
 
 
+def run_trial_repeated(
+    workload_path: str,
+    knobs: Knobs,
+    steps: int,
+    warmup: int,
+    timeout_s: int = 900,
+    repeats: int = 1,
+) -> dict:
+    """Measure one config `repeats` times; return the median-throughput run
+    annotated with the spread. Failed repeats are dropped; if all fail, the
+    last error is returned."""
+    results = [
+        run_trial(workload_path, knobs, steps, warmup, timeout_s)
+        for _ in range(max(1, repeats))
+    ]
+    ok = [r for r in results if not r.get("error")]
+    if not ok:
+        return results[-1]
+    ok.sort(key=lambda r: r["throughput"])
+    median = ok[len(ok) // 2]
+    median["repeats"] = len(ok)
+    median["throughput_min"] = ok[0]["throughput"]
+    median["throughput_max"] = ok[-1]["throughput"]
+    return median
+
+
 def run_trials(
     workload_path: str,
     trials: list[Trial],
@@ -67,12 +93,14 @@ def run_trials(
     warmup: int,
     on_progress=None,
     timeout_s: int = 900,
+    repeats: int = 1,
 ) -> list[Trial]:
     for i, trial in enumerate(trials):
         if on_progress:
             on_progress(i, len(trials), trial)
-        trial.result = run_trial(
-            workload_path, trial.knobs, steps, warmup, timeout_s=timeout_s
+        trial.result = run_trial_repeated(
+            workload_path, trial.knobs, steps, warmup,
+            timeout_s=timeout_s, repeats=repeats,
         )
     return trials
 
