@@ -80,6 +80,19 @@ The ResNet result is the validating one: the profile measured an 11% data-wait f
 
 A replication note: on the synthetic workload, single-trial differences between configs on the ~8,500 samples/s plateau did not replicate — with `--repeats 3`, all configs beyond `workers=2` have overlapping spreads, and an apparent thread-contention effect from a single early run turned out to be noise. The verdict logic therefore picks the cheapest statistically-tied config, and headline numbers come from repeated measurements.
 
+### Heuristic vs LLM brain
+
+Both brains tuned ResNet-50/CIFAR-10 from the same baseline ([heuristic report](results/resnet_report.md), [LLM report](results/resnet50_llm.md)). They reached the same verdict — `workers=2`, ~1.14x — by very different routes:
+
+| | heuristic | LLM (Claude) |
+|---|---|---|
+| trials spent | 1 | 6 |
+| wall time | ~30 s | ~3 min |
+| diagnosis | one threshold rule | multi-signal: low CPU + moderate wait → *serial* loading, not CPU shortage; knew pin_memory is a no-op on unified memory |
+| knob interactions | hand-written worker×thread rule | paired every worker count with a complementary thread cap, unprompted |
+
+Takeaway so far: with one dominant signal and a hard ceiling (the 11% data-wait fraction bounds the win at ~1.12x), rules are cheaper and equally effective. The LLM's value showed in explanation quality and in handling knob interactions without bespoke rules — and its main weakness (over-exploring a capped space) is a prompt fix: pass the computed speedup ceiling and ask it to budget trials accordingly.
+
 ## Choosing the brain
 
 ```bash
