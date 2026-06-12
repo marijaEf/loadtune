@@ -62,28 +62,47 @@ def plot_throughput_vs_workers(
     out: Path,
     noise_tol: float = 0.02,
 ) -> Optional[Path]:
-    """Throughput vs num_workers, with the noise band that drives the verdict."""
-    pts = {baseline.knobs["num_workers"]: baseline.throughput}
+    """Throughput vs num_workers, with the noise band that drives the verdict.
+
+    Configs with a capped num_threads are drawn as a separate series so
+    worker×thread pairs don't collide at the same x position.
+    """
+    plain: dict[int, float] = {}
+    capped: dict[int, float] = {}
+
+    def add(knobs: dict, thr: float) -> None:
+        target = capped if knobs.get("num_threads") is not None else plain
+        target[knobs["num_workers"]] = thr
+
+    add(baseline.knobs, baseline.throughput)
     for t in trials:
         if t.ok:
-            pts[t.result["knobs"]["num_workers"]] = t.result["throughput"]
-    if len(pts) < 3:
+            add(t.result["knobs"], t.result["throughput"])
+    if len(plain) + len(capped) < 3:
         return None
-    xs = sorted(pts)
-    ys = [pts[x] for x in xs]
-    top = max(ys)
+    top = max(list(plain.values()) + list(capped.values()))
 
     fig, ax = plt.subplots(figsize=(6, 4))
     ax.axhspan(top * (1 - noise_tol), top, color=BAND,
                label=f"within {noise_tol:.0%} of best (tie → fewest workers)")
-    ax.plot(xs, ys, marker="o", color=COMP)
-    for x, y in zip(xs, ys):
-        ax.annotate(f"{y:.0f}", (x, y), textcoords="offset points",
+    xs = sorted(plain)
+    ax.plot(xs, [plain[x] for x in xs], marker="o", color=COMP,
+            label="default threads")
+    for x in xs:
+        ax.annotate(f"{plain[x]:.0f}", (x, plain[x]), textcoords="offset points",
                     xytext=(0, 8), ha="center", fontsize=8)
+    if capped:
+        cxs = sorted(capped)
+        ax.plot(cxs, [capped[x] for x in cxs], marker="s", linestyle="--",
+                color=WAIT, label="intra-op threads capped")
+        for x in cxs:
+            ax.annotate(f"{capped[x]:.0f}", (x, capped[x]),
+                        textcoords="offset points", xytext=(0, -14),
+                        ha="center", fontsize=8, color=WAIT)
     ax.set_xlabel("num_workers")
     ax.set_ylabel("throughput (samples/s)")
     ax.set_title("Throughput vs DataLoader workers")
-    ax.set_xticks(xs)
+    ax.set_xticks(sorted(set(plain) | set(capped)))
     ax.legend(frameon=False, fontsize=8)
     fig.tight_layout()
     fig.savefig(out, dpi=150)
