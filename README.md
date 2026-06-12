@@ -72,7 +72,7 @@ loadtune tune workloads/resnet50_cifar.py --steps 100 --out resnet_report.md
 
 The ResNet result is the validating one: the profile measured an 11% data-wait fraction, which bounds the input-side speedup at ~1.12x — the agent proposed a single cheap trial, claimed the full ceiling, and stopped instead of sweeping knobs that cannot help.
 
-![ResNet-50 step timeline, baseline vs tuned](resnet_report_timeline.png)
+![ResNet-50 step timeline, baseline vs tuned](results/resnet_report_timeline.png)
 
 *The red band is time the accelerator spends idle, waiting for data. Two DataLoader workers remove it entirely; what remains is pure compute.*
 
