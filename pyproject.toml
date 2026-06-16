@@ -22,7 +22,8 @@ dependencies = [
 llm = ["anthropic>=0.40"]
 vision = ["torchvision"]
 nlp = ["transformers", "datasets"]
-all = ["loadtune[llm,vision,nlp]"]
+test = ["pytest"]
+all = ["loadtune[llm,vision,nlp,test]"]
 
 [project.scripts]
 loadtune = "loadtune.cli:main"

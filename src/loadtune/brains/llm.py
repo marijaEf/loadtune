@@ -58,6 +58,14 @@ class LLMBrain:
             f"- {s.name}: {s.description}" for s in KNOB_SPECS.values()
         )
         ceiling = 1.0 / max(1e-6, 1.0 - baseline.data_wait_frac)
+        # Programmatic ceiling-aware budget clamping
+        if ceiling < 1.05:
+            max_trials = min(max_trials, 1)
+        elif ceiling < 1.20:
+            max_trials = min(max_trials, 2)
+        elif ceiling < 1.50:
+            max_trials = min(max_trials, 3)
+
         profile = baseline.to_dict()
         # Step series are large and add nothing to the diagnosis.
         profile.pop("step_data_wait_ms", None)

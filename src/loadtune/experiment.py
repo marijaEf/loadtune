@@ -32,8 +32,25 @@ def run_trial(
     steps: int,
     warmup: int,
     timeout_s: int = 900,
+    fast: bool = False,
 ) -> dict:
-    """Run one trial in a fresh Python process; return the result dict."""
+    """Run one trial. If fast is True, run in-process to save startup overhead."""
+    if fast:
+        from .profiler import profile_session
+        from .workload import load_workload
+        import torch
+        try:
+            wl = load_workload(workload_path)
+            res = profile_session(wl, knobs, steps=steps, warmup=warmup)
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                torch.mps.empty_cache()
+            return res.to_dict()
+        except Exception:
+            import traceback
+            return {"error": traceback.format_exc(limit=5)}
+
     cmd = [
         sys.executable,
         "-m",
@@ -59,8 +76,16 @@ def run_trial(
     for line in reversed(proc.stdout.splitlines()):
         if line.startswith("LOADTUNE_RESULT "):
             return json.loads(line[len("LOADTUNE_RESULT "):])
+            
+    if proc.returncode < 0:
+        return {
+            "error": f"trial process died with signal {-proc.returncode} (possible OOM)",
+            "stdout_tail": proc.stdout[-2000:],
+            "stderr_tail": proc.stderr[-2000:],
+        }
+        
     return {
-        "error": "trial produced no result",
+        "error": f"trial produced no result (exit code {proc.returncode})",
         "stdout_tail": proc.stdout[-2000:],
         "stderr_tail": proc.stderr[-2000:],
     }
@@ -73,12 +98,13 @@ def run_trial_repeated(
     warmup: int,
     timeout_s: int = 900,
     repeats: int = 1,
+    fast: bool = False,
 ) -> dict:
     """Measure one config `repeats` times; return the median-throughput run
     annotated with the spread. Failed repeats are dropped; if all fail, the
     last error is returned."""
     results = [
-        run_trial(workload_path, knobs, steps, warmup, timeout_s)
+        run_trial(workload_path, knobs, steps, warmup, timeout_s, fast=fast)
         for _ in range(max(1, repeats))
     ]
     ok = [r for r in results if not r.get("error")]
@@ -100,13 +126,14 @@ def run_trials(
     on_progress=None,
     timeout_s: int = 900,
     repeats: int = 1,
+    fast: bool = False,
 ) -> list[Trial]:
     for i, trial in enumerate(trials):
         if on_progress:
             on_progress(i, len(trials), trial)
         trial.result = run_trial_repeated(
             workload_path, trial.knobs, steps, warmup,
-            timeout_s=timeout_s, repeats=repeats,
+            timeout_s=timeout_s, repeats=repeats, fast=fast,
         )
     return trials
 

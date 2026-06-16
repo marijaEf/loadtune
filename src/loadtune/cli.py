@@ -40,33 +40,55 @@ def cmd_profile(args: argparse.Namespace) -> int:
 
 
 def cmd_tune(args: argparse.Namespace) -> int:
-    baseline_knobs = Knobs(num_workers=args.workers, batch_size=args.batch_size)
-    print(f"[loadtune] baseline run: {baseline_knobs.label()} ...")
-    baseline_dict = run_trial_repeated(args.workload, baseline_knobs, args.steps,
-                                       args.warmup, timeout_s=args.timeout,
-                                       repeats=args.repeats)
-    if baseline_dict.get("error"):
-        print("[loadtune] baseline failed:\n" + str(baseline_dict["error"]))
-        return 1
-    baseline = ProfileResult(**baseline_dict)
-    print(
-        f"[loadtune] baseline: {baseline.throughput:.1f} samples/s, "
-        f"data wait {baseline.data_wait_frac:.1%}, device {baseline.device}"
-    )
+    original_baseline_knobs = Knobs(num_workers=args.workers, batch_size=args.batch_size)
+    current_knobs = original_baseline_knobs
+    original_baseline = None
+    all_trials = []
+    
+    max_rounds = getattr(args, "max_rounds", 1)
+    for round_num in range(max_rounds):
+        if max_rounds > 1:
+            print(f"\n[loadtune] --- Round {round_num + 1}/{max_rounds} ---")
+            
+        print(f"[loadtune] baseline run: {current_knobs.label()} ...")
+        baseline_dict = run_trial_repeated(args.workload, current_knobs, args.steps,
+                                           args.warmup, timeout_s=args.timeout,
+                                           repeats=args.repeats, fast=getattr(args, "fast", False))
+        if baseline_dict.get("error"):
+            print("[loadtune] baseline failed:\n" + str(baseline_dict["error"]))
+            return 1
+            
+        baseline = ProfileResult(**baseline_dict)
+        if original_baseline is None:
+            original_baseline = baseline
+            
+        print(
+            f"[loadtune] baseline: {baseline.throughput:.1f} samples/s, "
+            f"data wait {baseline.data_wait_frac:.1%}, device {baseline.device}"
+        )
 
-    brain = make_brain(args.brain)
-    print(f"[loadtune] brain: {brain.name}")
-    trials = brain.propose(baseline, max_trials=args.max_trials)
-    if not trials:
-        print("[loadtune] brain proposed no trials — baseline looks fine.")
-        return 0
+        brain = make_brain(args.brain)
+        print(f"[loadtune] brain: {brain.name}")
+        trials = brain.propose(baseline, max_trials=args.max_trials)
+        if not trials:
+            print("[loadtune] brain proposed no trials — baseline looks fine.")
+            break
 
-    def progress(i: int, n: int, t: Trial) -> None:
-        print(f"[loadtune] trial {i + 1}/{n}: {t.knobs.label()}  ({t.reason})")
+        def progress(i: int, n: int, t: Trial) -> None:
+            print(f"[loadtune] trial {i + 1}/{n}: {t.knobs.label()}  ({t.reason})")
 
-    run_trials(args.workload, trials, args.steps, args.warmup,
-               on_progress=progress, timeout_s=args.timeout,
-               repeats=args.repeats)
+        run_trials(args.workload, trials, args.steps, args.warmup,
+                   on_progress=progress, timeout_s=args.timeout,
+                   repeats=args.repeats, fast=getattr(args, "fast", False))
+                   
+        all_trials.extend(trials)
+        
+        best = best_trial(trials)
+        if not best or best.throughput <= baseline.throughput:
+            print("[loadtune] no better config found in this round.")
+            break
+            
+        current_knobs = best.knobs
 
     out = Path(args.out)
     plot_files: list[str] = []
@@ -75,7 +97,7 @@ def cmd_tune(args: argparse.Namespace) -> int:
             from .plots import generate_plots
 
             paths = generate_plots(
-                baseline, trials, best_trial(trials),
+                original_baseline, all_trials, best_trial(all_trials),
                 out_dir=out.parent if str(out.parent) else Path("."),
                 prefix=out.stem,
             )
@@ -85,8 +107,8 @@ def cmd_tune(args: argparse.Namespace) -> int:
             print("[loadtune] matplotlib not installed; skipping charts "
                   "(pip install matplotlib)")
 
-    narrative = brain.explain(baseline, trials)
-    report = render_report(baseline, trials, brain.name, narrative, plot_files)
+    narrative = brain.explain(original_baseline, all_trials)
+    report = render_report(original_baseline, all_trials, brain.name, narrative, plot_files)
     out.write_text(report)
     print(f"[loadtune] report written to {out}")
 
@@ -95,16 +117,20 @@ def cmd_tune(args: argparse.Namespace) -> int:
 
         html_out = out.with_suffix(".html")
         html_out.write_text(
-            render_html_report(baseline, trials, brain.name, narrative)
+            render_html_report(original_baseline, all_trials, brain.name, narrative)
         )
         print(f"[loadtune] interactive report written to {html_out}")
 
-    best = best_trial(trials)
-    if best and best.throughput > baseline.throughput:
+    best = best_trial(all_trials)
+    if best and best.throughput > original_baseline.throughput:
         print(
-            f"[loadtune] best: {best.knobs.label()} — "
-            f"{best.throughput / baseline.throughput:.2f}x baseline"
+            f"[loadtune] best overall: {best.knobs.label()} — "
+            f"{best.throughput / original_baseline.throughput:.2f}x baseline"
         )
+        if getattr(args, "apply", False):
+            from .apply import generate_apply_snippet
+            out_file = generate_apply_snippet(best.knobs, Path(args.workload).parent)
+            print(f"[loadtune] apply snippet written to {out_file}")
     return 0
 
 
@@ -130,6 +156,10 @@ def main(argv: list[str] | None = None) -> int:
         "--repeats", type=int, default=1,
         help="measure each config N times; report median with min–max spread",
     )
+    p_tune.add_argument(
+        "--max-rounds", type=int, default=1,
+        help="number of tuning rounds (multi-round optimization)",
+    )
     p_tune.add_argument("--out", default="loadtune_report.md")
     p_tune.add_argument(
         "--no-plots", dest="plots", action="store_false", default=True,
@@ -138,6 +168,14 @@ def main(argv: list[str] | None = None) -> int:
     p_tune.add_argument(
         "--html", action="store_true",
         help="also write a self-contained interactive HTML report",
+    )
+    p_tune.add_argument(
+        "--apply", action="store_true",
+        help="generate a python snippet to apply the recommended config",
+    )
+    p_tune.add_argument(
+        "--fast", action="store_true",
+        help="run trials in-process to avoid process startup overhead",
     )
     p_tune.set_defaults(fn=cmd_tune)
 

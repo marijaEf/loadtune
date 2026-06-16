@@ -131,6 +131,21 @@ def get_workload() -> Workload:
 
 The heuristic brain's rules, beyond the worker sweep: a **CPU-saturation guard** (input-bound + cores maxed → more workers can't help; the diagnosis says so instead of proposing futile trials), a **jitter rule** (p90/p50 step time ≥ 1.5 with active workers → deeper prefetch to absorb stragglers), and **worker×thread pairing** (4+ workers → paired trial capping main-process intra-op threads to the leftover cores).
 
+## Advanced Usage
+
+`loadtune` supports several advanced flags to streamline your tuning experience:
+
+- **Auto-Apply (`--apply`)**: Automatically generates a `loadtune_apply.py` code snippet containing the best configuration found. You can easily import this into your project.
+- **Fast Mode (`--fast`)**: Runs tuning trials in-process instead of spawning fresh Python subprocesses. This drastically reduces trial startup overhead for workloads with massive models or datasets, but sacrifices some memory isolation.
+- **Multi-Round Tuning (`--max-rounds N`)**: Automatically repeats the tuning loop. If an input-bound bottleneck is removed, `loadtune` will profile again to catch shifting bottlenecks.
+- **Repeats (`--repeats N`)**: Measure each configuration N times. The tool will report the median throughput with min-max spread, filtering out system noise.
+
+## Troubleshooting
+
+- **Out of Memory (OOM) during trials:** If a trial proposes `num_workers=8` and crashes, `loadtune` will gracefully catch the `-9` SIGKILL signal and mark the trial as an OOM failure. It will automatically fallback to cheaper configurations.
+- **Apple Silicon (MPS) vs CUDA:** On Apple Silicon, unified memory means `pin_memory` is a no-op, and CPU-side augmentations directly compete with the GPU for memory bandwidth. MPS workloads will often see larger gains from dataloader tuning.
+- **Slow Trial Startup:** If you notice trials taking too long to start, use the `--fast` flag, or ensure your datasets and models are pre-downloaded to avoid downloading them during every isolated subprocess.
+
 ## Notes for Apple Silicon (MPS)
 
 Developed on an M2 Pro. Data-wait measurements use `torch.mps.synchronize()` so compute timings are honest. CPU-side augmentation competes with the GPU for unified-memory bandwidth, which makes dataloader bottlenecks *more* pronounced on Macs — and the wins correspondingly larger. AMP and `torch.compile` knobs are out of scope on MPS for now (limited backend support).
