@@ -67,7 +67,20 @@ def cmd_tune(args: argparse.Namespace) -> int:
             f"data wait {baseline.data_wait_frac:.1%}, device {baseline.device}"
         )
 
-        brain = make_brain(args.brain)
+        brain_choice = args.brain
+        if brain_choice == "auto":
+            from .brains.router import get_brain_for_profile
+            brain_choice = get_brain_for_profile(baseline)
+            print(f"[loadtune] Router selected brain: {brain_choice}")
+
+        if brain_choice == "agent":
+            print(f"\n[loadtune] Escalating to Autonomous Multi-Agent Engineer...")
+            import asyncio
+            from .agentic.orchestrator import run_agent_optimization
+            asyncio.run(run_agent_optimization(args.workload, baseline))
+            return 0
+
+        brain = make_brain(brain_choice)
         print(f"[loadtune] brain: {brain.name}")
         trials = brain.propose(baseline, max_trials=args.max_trials)
         if not trials:
@@ -148,8 +161,8 @@ def main(argv: list[str] | None = None) -> int:
     p_tune = sub.add_parser("tune", help="profile, diagnose, and trial better configs")
     _add_common(p_tune)
     p_tune.add_argument(
-        "--brain", choices=["auto", "heuristic", "llm", "google"], default="auto",
-        help="auto = google if GEMINI_API_KEY is set, else llm if ANTHROPIC_API_KEY is set, else heuristic",
+        "--brain", choices=["auto", "heuristic", "llm", "google", "agent"], default="auto",
+        help="auto = deterministic routing; agent = invokes autonomous multi-agent editing",
     )
     p_tune.add_argument("--max-trials", type=int, default=6)
     p_tune.add_argument(
