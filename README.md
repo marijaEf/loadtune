@@ -159,11 +159,11 @@ Developed on an M2 Pro. Data-wait measurements use `torch.mps.synchronize()` so 
 - [x] Interactive HTML report (`--html`)
 - [ ] Phase 2: NVIDIA DeepLearningExamples on cloud GPUs — agent vs expert-tuned configs
 - [ ] Compute-bound family: AMP, `torch.compile`, `channels_last`, fused optimizers (CUDA)
-- [ ] Multi-round tuning: re-profile after adoption, switch knob families as the bottleneck moves
+- [x] Multi-round tuning (`--max-rounds`)
 - [ ] `non_blocking` copies knob (CUDA, pairs with pin_memory)
 - [ ] Accuracy-parity check (fixed-step loss comparison) for semantics-changing knobs
 - [ ] Persist raw trial data (`--save-raw`) so reports can be regenerated without re-running
-- [ ] Auto-apply: patch the recommended config into the user's script
+- [x] Auto-apply (`--apply` generates a configuration snippet)
 
 ## License
 
