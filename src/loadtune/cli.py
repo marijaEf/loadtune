@@ -148,8 +148,8 @@ def main(argv: list[str] | None = None) -> int:
     p_tune = sub.add_parser("tune", help="profile, diagnose, and trial better configs")
     _add_common(p_tune)
     p_tune.add_argument(
-        "--brain", choices=["auto", "heuristic", "llm"], default="auto",
-        help="auto = llm if ANTHROPIC_API_KEY is set, else heuristic",
+        "--brain", choices=["auto", "heuristic", "llm", "google"], default="auto",
+        help="auto = google if GEMINI_API_KEY is set, else llm if ANTHROPIC_API_KEY is set, else heuristic",
     )
     p_tune.add_argument("--max-trials", type=int, default=6)
     p_tune.add_argument(

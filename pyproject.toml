@@ -20,10 +20,11 @@ dependencies = [
 
 [project.optional-dependencies]
 llm = ["anthropic>=0.40"]
+google = ["google-genai>=0.1.0"]
 vision = ["torchvision"]
 nlp = ["transformers", "datasets"]
 test = ["pytest"]
-all = ["loadtune[llm,vision,nlp,test]"]
+all = ["loadtune[llm,google,vision,nlp,test]"]
 
 [project.scripts]
 loadtune = "loadtune.cli:main"

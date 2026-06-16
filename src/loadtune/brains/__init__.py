@@ -2,7 +2,8 @@
 
 --brain heuristic  deterministic rules, no network, free
 --brain llm        Claude reasons over the baseline profile (needs ANTHROPIC_API_KEY)
---brain auto       llm if a key is set, else heuristic
+--brain google     Gemini reasons over the baseline profile (needs GEMINI_API_KEY)
+--brain auto       google or llm if a key is set, else heuristic
 """
 
 from __future__ import annotations
@@ -35,10 +36,18 @@ def make_brain(kind: str = "auto") -> Brain:
         from .llm import LLMBrain
 
         return LLMBrain()
+    if kind == "google":
+        from .google import GoogleBrain
+
+        return GoogleBrain()
     if kind == "auto":
+        if os.environ.get("GEMINI_API_KEY"):
+            from .google import GoogleBrain
+
+            return GoogleBrain()
         if os.environ.get("ANTHROPIC_API_KEY"):
             from .llm import LLMBrain
 
             return LLMBrain()
         return HeuristicBrain()
-    raise ValueError(f"unknown brain: {kind!r} (use heuristic|llm|auto)")
+    raise ValueError(f"unknown brain: {kind!r} (use heuristic|llm|google|auto)")

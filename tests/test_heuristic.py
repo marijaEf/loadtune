@@ -27,8 +27,9 @@ def test_heuristic_propose_compute_bound():
         cpu_util_mean=80.0
     )
     trials = brain.propose(baseline, max_trials=5)
-    # Since it's compute bound and we only tune input pipeline right now, it should propose 0 trials
-    assert len(trials) == 0
+    # Since it's compute bound, the heuristic brain tries to reduce workers to save overhead (proposes 0 and 1)
+    assert len(trials) > 0
+    assert any(t.knobs.num_workers < 2 for t in trials)
 
 def test_heuristic_explain():
     brain = HeuristicBrain()
@@ -41,4 +42,4 @@ def test_heuristic_explain():
     )
     trials = brain.propose(baseline, max_trials=5)
     explain = brain.explain(baseline, trials)
-    assert "input pipeline" in explain.lower() or "data wait" in explain.lower()
+    assert "waiting for the dataloader" in explain.lower() or "input-bound" in explain.lower()
