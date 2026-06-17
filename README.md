@@ -1,17 +1,18 @@
 # loadtune
 
-**Agentic profiler & tuner for ML training workloads — every recommendation is a measured experiment, not a suggestion.** loadtune profiles your training loop, splits every step into *data wait* vs *compute*, diagnoses input-pipeline bottlenecks, and runs short isolated experiments to find a better config — for example proposing `num_workers=2` instead of `num_workers=4` when the extra workers are pure overhead. The experiment-planning "brain" is swappable: deterministic heuristics or Claude-API reasoning, with [a running comparison of which wins where](#heuristic-vs-llm-brain).
+**Agentic profiler & tuner for ML training workloads — every recommendation is a measured experiment, not a suggestion.** loadtune profiles your training loop, splits every step into *data wait* vs *compute*, diagnoses input-pipeline bottlenecks, and runs short isolated experiments to find a better config — for example proposing `num_workers=2` instead of `num_workers=4` when the extra workers are pure overhead.
 
-Born out of a master-thesis pain: hand-tuning dataloaders is slow, boring, and machine-specific. So it got automated.
+Use it as a blazing-fast local CLI tool with deterministic rules, or plug it into your favorite AI assistant via the built-in **MCP Server** to let an LLM autonomously debug and rewrite your PyTorch bottlenecks.
 
 ## How it works
 
 ```
-baseline profile ──▶ brain (diagnosis + experiment plan) ──▶ trials ──▶ report
-     │                      │                                  │
-     │              heuristic rules or                 each trial runs in a
-     │              Claude API reasoning               fresh subprocess for
-     └─ data-wait vs compute split,                    clean measurements
+baseline profile ──▶ heuristic rules ──▶ trials ──▶ report
+     │                                     │
+     │                                     │
+     │                           each trial runs in a
+     │                           fresh subprocess for
+     └─ data-wait vs compute split, clean measurements
         CPU util, step-time percentiles
 ```
 
@@ -35,7 +36,7 @@ v0.1 implements one iteration of this loop for the input-pipeline knob family; f
 
 ```bash
 pip install -e ".[vision]"        # core + torchvision workloads
-pip install -e ".[all]"           # + Claude API brain + NLP workload
+pip install -e ".[all]"           # all workloads + tests
 ```
 
 ## Quickstart (no downloads needed)
@@ -80,30 +81,7 @@ The ResNet result is the validating one: the profile measured an 11% data-wait f
 
 A replication note: on the synthetic workload, single-trial differences between configs on the ~8,500 samples/s plateau did not replicate — with `--repeats 3`, all configs beyond `workers=2` have overlapping spreads, and an apparent thread-contention effect from a single early run turned out to be noise. The verdict logic therefore picks the cheapest statistically-tied config, and headline numbers come from repeated measurements.
 
-### Heuristic vs LLM brain
 
-Both brains tuned ResNet-50/CIFAR-10 from the same baseline ([heuristic report](results/resnet_report.md), [LLM report](results/resnet50_llm.md)). They reached the same verdict — `workers=2`, ~1.14x — by very different routes:
-
-| | heuristic | LLM (Claude) |
-|---|---|---|
-| trials spent | 1 | 6 |
-| wall time | ~30 s | ~3 min |
-| diagnosis | one threshold rule | multi-signal: low CPU + moderate wait → *serial* loading, not CPU shortage; knew pin_memory is a no-op on unified memory |
-| knob interactions | hand-written worker×thread rule | paired every worker count with a complementary thread cap, unprompted |
-
-Takeaway so far: with one dominant signal and a hard ceiling (the 11% data-wait fraction bounds the win at ~1.12x), rules are cheaper and equally effective. The LLM's value showed in explanation quality and in handling knob interactions without bespoke rules — and its main weakness (over-exploring a capped space) turned out to be a prompt fix.
-
-**The fix, measured:** after passing the computed speedup ceiling into the prompt with trial-budget guidance, the LLM consistently drops from 6 trials to 2 across re-runs — one primary proposal plus one cheap alternative — and its diagnosis reasons from the ceiling directly ("the input pipeline ceiling is ~1.12x... gains will be limited", [v2 report](results/resnet50_llm_v2.md)). Measured result lands on the ceiling each time (1.13–1.15x, within run-to-run noise).
-
-## Choosing the brain
-
-```bash
-loadtune tune <workload> --brain heuristic   # deterministic rules, free, offline
-loadtune tune <workload> --brain llm         # Claude reasons over the profile
-loadtune tune <workload> --brain auto        # llm if ANTHROPIC_API_KEY is set
-```
-
-The LLM brain (set `ANTHROPIC_API_KEY`, `pip install anthropic`) receives the baseline profile, hardware context, and the computed input-side speedup ceiling — so it budgets trials to the opportunity instead of over-exploring a capped space. It returns a diagnosis and an experiment plan as JSON, sandboxed by guardrails (invalid configs are clamped; any API failure falls back to heuristics and is labeled as such in the report). `LOADTUNE_LLM_MODEL` overrides the model.
 
 Add `--html` to any tune run to also get a self-contained interactive report (hover tooltips, spread bars from `--repeats`) you can share as a single file.
 
