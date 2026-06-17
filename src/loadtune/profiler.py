@@ -100,6 +100,16 @@ def profile_session(
     )
     model = workload.make_model().to(device)
     model.train()
+    
+    # Check if the user already compiled it in make_model()
+    is_compiled = type(model).__name__ == "OptimizedModule" or getattr(model, "_is_compiled", False)
+    
+    if getattr(knobs, "compile", False) and not is_compiled:
+        try:
+            model = torch.compile(model)
+        except Exception as e:
+            print(f"[loadtune] torch.compile failed or not supported: {e}")
+            
     optimizer = workload.make_optimizer(model)
 
     if psutil:

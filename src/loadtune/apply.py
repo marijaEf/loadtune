@@ -37,5 +37,15 @@ def generate_apply_snippet(knobs: Knobs, out_dir: Path) -> Path:
     else:
         lines.append("    pass  # No global configs to apply")
         
+    lines.extend([
+        "",
+        "def apply_model_configs(model: torch.nn.Module) -> torch.nn.Module:",
+    ])
+    
+    if getattr(knobs, "compile", False):
+        lines.append("    return torch.compile(model)")
+    else:
+        lines.append("    return model  # No model configs to apply")
+        
     out_file.write_text("\n".join(lines) + "\n")
     return out_file

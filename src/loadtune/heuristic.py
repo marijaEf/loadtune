@@ -53,7 +53,8 @@ class HeuristicBrain:
                     Trial(
                         Knobs(num_workers=b.num_workers, persistent_workers=True,
                               pin_memory=b.pin_memory, batch_size=b.batch_size,
-                              num_threads=max(1, baseline.num_cpus - b.num_workers)),
+                              num_threads=max(1, baseline.num_cpus - b.num_workers),
+                              compile=getattr(b, "compile", False)),
                         reason=f"CPU saturated ({cpu:.0f}%): cap intra-op threads "
                                f"instead of adding workers",
                     )
@@ -68,7 +69,8 @@ class HeuristicBrain:
                 cands.append(
                     Trial(
                         Knobs(num_workers=w, persistent_workers=w > 0,
-                              pin_memory=b.pin_memory, batch_size=b.batch_size),
+                              pin_memory=b.pin_memory, batch_size=b.batch_size,
+                              compile=getattr(b, "compile", False)),
                         reason=f"data_wait_frac={frac:.0%} ≥ {INPUT_BOUND:.0%}: "
                                f"input-bound, trying num_workers={w}",
                     )
@@ -78,7 +80,8 @@ class HeuristicBrain:
                         Trial(
                             Knobs(num_workers=w, persistent_workers=True,
                                   pin_memory=b.pin_memory, batch_size=b.batch_size,
-                                  num_threads=max(1, baseline.num_cpus - w)),
+                                  num_threads=max(1, baseline.num_cpus - w),
+                                  compile=getattr(b, "compile", False)),
                             reason=f"workers={w} claim cores: cap intra-op "
                                    f"threads at {max(1, baseline.num_cpus - w)} "
                                    f"to avoid contention",
@@ -89,7 +92,7 @@ class HeuristicBrain:
                     Trial(
                         Knobs(num_workers=b.num_workers, prefetch_factor=4,
                               persistent_workers=True, pin_memory=b.pin_memory,
-                              batch_size=b.batch_size),
+                              batch_size=b.batch_size, compile=getattr(b, "compile", False)),
                         reason="input-bound with workers active: deeper prefetch",
                     )
                 )
@@ -100,9 +103,20 @@ class HeuristicBrain:
                 cands.append(
                     Trial(
                         Knobs(num_workers=w, persistent_workers=w > 0,
-                              pin_memory=b.pin_memory, batch_size=b.batch_size),
+                              pin_memory=b.pin_memory, batch_size=b.batch_size,
+                              compile=getattr(b, "compile", False)),
                         reason=f"data_wait_frac={frac:.0%} ≤ {HEALTHY:.0%}: "
                                f"compute-bound, workers may be overhead; try {w}",
+                    )
+                )
+            
+            # Rule: compute-bound with CUDA/CPU -> try graph compilation
+            if baseline.device in ("cuda", "cpu") and not getattr(b, "compile", False):
+                cands.append(
+                    Trial(
+                        Knobs(**{**b.to_dict(), "compile": True}),
+                        reason=f"compute-bound (data wait {frac:.0%} ≤ {HEALTHY:.0%}): "
+                               f"try torch.compile for graph-level optimization",
                     )
                 )
         else:
@@ -112,7 +126,8 @@ class HeuristicBrain:
                     cands.append(
                         Trial(
                             Knobs(num_workers=w, persistent_workers=w > 0,
-                                  pin_memory=b.pin_memory, batch_size=b.batch_size),
+                                  pin_memory=b.pin_memory, batch_size=b.batch_size,
+                                  compile=getattr(b, "compile", False)),
                             reason=f"mild data wait ({frac:.0%}): nudge workers to {w}",
                         )
                     )
@@ -124,7 +139,7 @@ class HeuristicBrain:
                 Trial(
                     Knobs(num_workers=b.num_workers, prefetch_factor=4,
                           persistent_workers=True, pin_memory=b.pin_memory,
-                          batch_size=b.batch_size),
+                          batch_size=b.batch_size, compile=getattr(b, "compile", False)),
                     reason=f"step-time jitter p90/p50={jitter:.2f} ≥ {JITTERY}: "
                            f"deeper prefetch absorbs straggler batches",
                 )
@@ -135,7 +150,8 @@ class HeuristicBrain:
             cands.append(
                 Trial(
                     Knobs(num_workers=b.num_workers or 2, persistent_workers=True,
-                          pin_memory=True, batch_size=b.batch_size),
+                          pin_memory=True, batch_size=b.batch_size,
+                          compile=getattr(b, "compile", False)),
                     reason="CUDA device: pin_memory speeds host-to-device copies",
                 )
             )

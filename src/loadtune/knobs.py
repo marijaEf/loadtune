@@ -53,6 +53,11 @@ KNOB_SPECS: dict[str, KnobSpec] = {
         "workers are active. None = torch default (all cores).",
         candidates=None,  # derived from cpu_count and num_workers
     ),
+    "compile": KnobSpec(
+        "compile",
+        "JIT compile the model using torch.compile (requires PyTorch 2.0+).",
+        candidates=[True, False],
+    ),
 }
 
 
@@ -66,6 +71,7 @@ class Knobs:
     pin_memory: bool = False
     batch_size: Optional[int] = None  # None -> workload default
     num_threads: Optional[int] = None  # None -> torch default (all cores)
+    compile: bool = False
 
     def loader_kwargs(self) -> dict[str, Any]:
         kw: dict[str, Any] = {
@@ -102,6 +108,8 @@ class Knobs:
             parts.append(f"bs={self.batch_size}")
         if self.num_threads is not None:
             parts.append(f"threads={self.num_threads}")
+        if getattr(self, "compile", False):
+            parts.append("compiled")
         return ", ".join(parts)
 
 
