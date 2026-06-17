@@ -13,9 +13,11 @@ authors = [{ name = "Marija Efremova", email = "marija@kodeollc.com" }]
 keywords = ["pytorch", "profiling", "dataloader", "performance", "agent"]
 dependencies = [
     "torch>=2.2",
-    "numpy",
+    "numpy>=1.24",
     "psutil",
-    "matplotlib",
+    "matplotlib>=3.7",
+    "jinja2>=3.1",
+    "mcp>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -29,6 +31,7 @@ all = ["loadtune[llm,google,agent,vision,nlp,test]"]
 
 [project.scripts]
 loadtune = "loadtune.cli:main"
+loadtune-mcp = "loadtune.mcp_server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/loadtune"]

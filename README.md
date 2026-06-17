@@ -140,6 +140,33 @@ The heuristic brain's rules, beyond the worker sweep: a **CPU-saturation guard**
 - **Multi-Round Tuning (`--max-rounds N`)**: Automatically repeats the tuning loop. If an input-bound bottleneck is removed, `loadtune` will profile again to catch shifting bottlenecks.
 - **Repeats (`--repeats N`)**: Measure each configuration N times. The tool will report the median throughput with min-max spread, filtering out system noise.
 
+## Use as an MCP Server (Claude Desktop & Antigravity)
+
+`loadtune` is fully compatible with the open **Model Context Protocol (MCP)**, meaning you can plug it directly into AI agents (like Claude Desktop) to act as an autonomous performance engineering skill. The server exposes tools like `profile_workload` and `trial_configurations`.
+
+**For Claude Desktop:**
+Add the following to your `claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "loadtune": {
+      "command": "loadtune-mcp"
+    }
+  }
+}
+```
+
+**For Google Antigravity:**
+You can connect to the server via standard I/O:
+```python
+from google.antigravity.mcp import StdioServerParameters, MCPClient
+
+params = StdioServerParameters(command="loadtune-mcp")
+async with MCPClient(params) as mcp:
+    await mcp.initialize()
+    # Your agent now has PyTorch profiling tools!
+```
+
 ## Troubleshooting
 
 - **Out of Memory (OOM) during trials:** If a trial proposes `num_workers=8` and crashes, `loadtune` will gracefully catch the `-9` SIGKILL signal and mark the trial as an OOM failure. It will automatically fallback to cheaper configurations.
