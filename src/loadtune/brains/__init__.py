@@ -1,14 +1,7 @@
-"""Brain selection: heuristic rules or Claude-API reasoning.
-
---brain heuristic  deterministic rules, no network, free
---brain llm        Claude reasons over the baseline profile (needs ANTHROPIC_API_KEY)
---brain google     Gemini reasons over the baseline profile (needs GEMINI_API_KEY)
---brain auto       google or llm if a key is set, else heuristic
-"""
+"""Brain protocol for heuristic rules."""
 
 from __future__ import annotations
 
-import os
 from typing import Protocol
 
 from ..experiment import Trial
@@ -25,29 +18,3 @@ class Brain(Protocol):
     def explain(self, baseline: ProfileResult, trials: list[Trial]) -> str:
         """Narrative summary of findings for the report."""
         ...
-
-
-def make_brain(kind: str = "auto") -> Brain:
-    from .heuristic import HeuristicBrain
-
-    if kind == "heuristic":
-        return HeuristicBrain()
-    if kind == "llm":
-        from .llm import LLMBrain
-
-        return LLMBrain()
-    if kind == "google":
-        from .google import GoogleBrain
-
-        return GoogleBrain()
-    if kind == "auto":
-        if os.environ.get("GEMINI_API_KEY"):
-            from .google import GoogleBrain
-
-            return GoogleBrain()
-        if os.environ.get("ANTHROPIC_API_KEY"):
-            from .llm import LLMBrain
-
-            return LLMBrain()
-        return HeuristicBrain()
-    raise ValueError(f"unknown brain: {kind!r} (use heuristic|llm|google|auto)")
