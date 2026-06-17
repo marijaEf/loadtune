@@ -130,6 +130,8 @@ The AI will use `loadtune` to:
 
 A 3-hour hardware debugging chore reduced to a single prompt!
 
+> **🧠 Note on AI Reasoning:** When used as an MCP Server, `loadtune` acts strictly as the empirical calculator—running the PyTorch scripts safely and returning the cold, hard performance metrics. The AI Agent itself acts as the brain, generating configuration hypotheses based on its pre-trained knowledge of PyTorch or any other web-search tools you provide it.
+
 **For Claude Desktop:**
 Add the following to your `claude_desktop_config.json`:
 ```json
