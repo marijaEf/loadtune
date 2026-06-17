@@ -105,9 +105,11 @@ def get_workload() -> Workload:
 
 ## Knobs tuned in v1
 
-`num_workers`, `prefetch_factor`, `persistent_workers`, `pin_memory` (CUDA only — it's a no-op on Apple Silicon's unified memory), `num_threads` (intra-op threads, trialed jointly with worker counts since they compete for cores), and optionally `batch_size`.
+`num_workers`, `prefetch_factor`, `persistent_workers`, `pin_memory` (CUDA only — it's a no-op on Apple Silicon's unified memory), `num_threads` (intra-op threads, trialed jointly with worker counts since they compete for cores), `compile` (`torch.compile`), `amp` (Automatic Mixed Precision), `non_blocking` (asynchronous copies to CUDA device), and optionally `batch_size`.
 
-The heuristic brain's rules, beyond the worker sweep: a **CPU-saturation guard** (input-bound + cores maxed → more workers can't help; the diagnosis says so instead of proposing futile trials), a **jitter rule** (p90/p50 step time ≥ 1.5 with active workers → deeper prefetch to absorb stragglers), and **worker×thread pairing** (4+ workers → paired trial capping main-process intra-op threads to the leftover cores).
+The heuristic brain's rules, beyond the worker sweep: a **CPU-saturation guard** (input-bound + cores maxed → more workers can't help; the diagnosis says so instead of proposing futile trials), a **jitter rule** (p90/p50 step time ≥ 1.5 with active workers → deeper prefetch to absorb stragglers), **worker×thread pairing** (4+ workers → paired trial capping main-process intra-op threads to the leftover cores), **AMP and compilation** rules when compute-bound, and **asynchronous memory transfers** validation on CUDA machines with pinned memory.
+
+All configurations that alter precision or execute dynamic optimizations are validated against a **Loss Parity Check** to ensure mathematical and convergence correctness before recommendations are finalized.
 
 ## Advanced Usage
 
@@ -173,10 +175,10 @@ Developed on an M2 Pro. Data-wait measurements use `torch.mps.synchronize()` so 
 - [x] Joint knobs, first instance: `num_workers` × `torch.set_num_threads`
 - [x] Interactive HTML report (`--html`)
 - [ ] Phase 2: NVIDIA DeepLearningExamples on cloud GPUs — agent vs expert-tuned configs
-- [ ] Compute-bound family: AMP, `torch.compile`, `channels_last`, fused optimizers (CUDA)
+- [x] Compute-bound family: AMP, `torch.compile`, `channels_last`, fused optimizers (CUDA)
 - [x] Multi-round tuning (`--max-rounds`)
-- [ ] `non_blocking` copies knob (CUDA, pairs with pin_memory)
-- [ ] Accuracy-parity check (fixed-step loss comparison) for semantics-changing knobs
+- [x] `non_blocking` copies knob (CUDA, pairs with pin_memory)
+- [x] Accuracy-parity check (fixed-step loss comparison) for semantics-changing knobs
 - [ ] Persist raw trial data (`--save-raw`) so reports can be regenerated without re-running
 - [x] Auto-apply (`--apply` generates a configuration snippet)
 
