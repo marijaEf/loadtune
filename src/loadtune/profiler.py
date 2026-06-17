@@ -63,6 +63,7 @@ class ProfileResult:
     # Per measured step, in ms — used for plotting.
     step_data_wait_ms: list[float] = field(default_factory=list)
     step_compute_ms: list[float] = field(default_factory=list)
+    losses: list[float] = field(default_factory=list)
     error: Optional[str] = None
     # Set when a config is measured multiple times (--repeats): the rest of
     # the fields then come from the median-throughput run.
@@ -115,65 +116,96 @@ def profile_session(
     if psutil:
         psutil.cpu_percent(interval=None)  # prime the counter
 
-    t0 = time.perf_counter()
-    it = iter(loader)  # worker spawn happens here
-    startup_s = time.perf_counter() - t0
+    # Intercept torch.Tensor.to if knobs.non_blocking is enabled and device is CUDA
+    original_to = torch.Tensor.to
+    non_blocking_active = getattr(knobs, "non_blocking", False) and device.type == "cuda"
+    if non_blocking_active:
+        def custom_to(self, *args, **kwargs):
+            kwargs["non_blocking"] = True
+            return original_to(self, *args, **kwargs)
+        torch.Tensor.to = custom_to
 
-    data_wait = 0.0
-    compute = 0.0
-    step_times: list[float] = []
-    step_waits_ms: list[float] = []
-    step_computes_ms: list[float] = []
-    cpu_samples: list[float] = []
-    done = 0
-    total_needed = warmup + steps
+    try:
+        t0 = time.perf_counter()
+        it = iter(loader)  # worker spawn happens here
+        startup_s = time.perf_counter() - t0
 
-    while done < total_needed:
-        t_fetch = time.perf_counter()
-        try:
-            batch = next(it)
-        except StopIteration:
-            it = iter(loader)
-            continue
-        t_got = time.perf_counter()
+        data_wait = 0.0
+        compute = 0.0
+        step_times: list[float] = []
+        step_waits_ms: list[float] = []
+        step_computes_ms: list[float] = []
+        cpu_samples: list[float] = []
+        step_losses: list[float] = []
+        done = 0
+        total_needed = warmup + steps
 
-        workload.train_step(model, optimizer, batch, device)
-        device_sync(device)
-        t_done = time.perf_counter()
+        while done < total_needed:
+            t_fetch = time.perf_counter()
+            try:
+                batch = next(it)
+            except StopIteration:
+                it = iter(loader)
+                continue
+            t_got = time.perf_counter()
 
-        done += 1
-        if done > warmup:
-            data_wait += t_got - t_fetch
-            compute += t_done - t_got
-            step_times.append((t_done - t_fetch) * 1000)
-            step_waits_ms.append(round((t_got - t_fetch) * 1000, 3))
-            step_computes_ms.append(round((t_done - t_got) * 1000, 3))
-            if psutil and done % 5 == 0:
-                cpu_samples.append(psutil.cpu_percent(interval=None))
+            if getattr(knobs, "amp", False) and device.type in ("cuda", "cpu"):
+                amp_dtype = torch.bfloat16 if device.type == "cpu" else torch.float16
+                with torch.autocast(device_type=device.type, dtype=amp_dtype):
+                    loss = workload.train_step(model, optimizer, batch, device)
+            else:
+                loss = workload.train_step(model, optimizer, batch, device)
 
-    total = data_wait + compute
-    return ProfileResult(
-        workload=workload.name,
-        knobs=knobs.to_dict(),
-        device=device.type,
-        num_cpus=num_cpus,
-        steps=steps,
-        batch_size=batch_size,
-        total_s=round(total, 4),
-        data_wait_s=round(data_wait, 4),
-        compute_s=round(compute, 4),
-        startup_s=round(startup_s, 4),
-        throughput=round(steps * batch_size / total, 2) if total > 0 else 0.0,
-        data_wait_frac=round(data_wait / total, 4) if total > 0 else 0.0,
-        step_time_p50_ms=round(statistics.median(step_times), 2) if step_times else 0.0,
-        step_time_p90_ms=(
-            round(statistics.quantiles(step_times, n=10)[8], 2)
-            if len(step_times) >= 10
-            else 0.0
-        ),
-        cpu_util_mean=(
-            round(statistics.mean(cpu_samples), 1) if cpu_samples else None
-        ),
-        step_data_wait_ms=step_waits_ms,
-        step_compute_ms=step_computes_ms,
-    )
+            device_sync(device)
+            t_done = time.perf_counter()
+
+            # Record loss for first 5 steps
+            if len(step_losses) < 5:
+                if isinstance(loss, torch.Tensor):
+                    loss_val = float(loss.detach().cpu().item())
+                elif isinstance(loss, (int, float)):
+                    loss_val = float(loss)
+                else:
+                    loss_val = 0.0
+                step_losses.append(loss_val)
+
+            done += 1
+            if done > warmup:
+                data_wait += t_got - t_fetch
+                compute += t_done - t_got
+                step_times.append((t_done - t_fetch) * 1000)
+                step_waits_ms.append(round((t_got - t_fetch) * 1000, 3))
+                step_computes_ms.append(round((t_done - t_got) * 1000, 3))
+                if psutil and done % 5 == 0:
+                    cpu_samples.append(psutil.cpu_percent(interval=None))
+
+        total = data_wait + compute
+        return ProfileResult(
+            workload=workload.name,
+            knobs=knobs.to_dict(),
+            device=device.type,
+            num_cpus=num_cpus,
+            steps=steps,
+            batch_size=batch_size,
+            total_s=round(total, 4),
+            data_wait_s=round(data_wait, 4),
+            compute_s=round(compute, 4),
+            startup_s=round(startup_s, 4),
+            throughput=round(steps * batch_size / total, 2) if total > 0 else 0.0,
+            data_wait_frac=round(data_wait / total, 4) if total > 0 else 0.0,
+            step_time_p50_ms=round(statistics.median(step_times), 2) if step_times else 0.0,
+            step_time_p90_ms=(
+                round(statistics.quantiles(step_times, n=10)[8], 2)
+                if len(step_times) >= 10
+                else 0.0
+            ),
+            cpu_util_mean=(
+                round(statistics.mean(cpu_samples), 1) if cpu_samples else None
+            ),
+            step_data_wait_ms=step_waits_ms,
+            step_compute_ms=step_computes_ms,
+            losses=step_losses,
+        )
+    finally:
+        if non_blocking_active:
+            torch.Tensor.to = original_to

@@ -81,7 +81,8 @@ def cmd_tune(args: argparse.Namespace) -> int:
 
         run_trials(args.workload, trials, args.steps, args.warmup,
                    on_progress=progress, timeout_s=args.timeout,
-                   repeats=args.repeats, fast=getattr(args, "fast", False))
+                   repeats=args.repeats, fast=getattr(args, "fast", False),
+                   baseline_result=baseline_dict)
                    
         all_trials.extend(trials)
         

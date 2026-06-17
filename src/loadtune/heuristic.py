@@ -119,6 +119,16 @@ class HeuristicBrain:
                                f"try torch.compile for graph-level optimization",
                     )
                 )
+
+            # Rule: compute-bound with CUDA/CPU -> try mixed precision (AMP)
+            if baseline.device in ("cuda", "cpu") and not getattr(b, "amp", False):
+                cands.append(
+                    Trial(
+                        Knobs(**{**b.to_dict(), "amp": True}),
+                        reason=f"compute-bound (data wait {frac:.0%} ≤ {HEALTHY:.0%}): "
+                               f"try AMP (Automatic Mixed Precision)",
+                    )
+                )
         else:
             # Rule: mildly input-bound — small nudges around current config.
             for w in {b.num_workers + 2, max(0, b.num_workers - 2)}:
@@ -127,7 +137,9 @@ class HeuristicBrain:
                         Trial(
                             Knobs(num_workers=w, persistent_workers=w > 0,
                                   pin_memory=b.pin_memory, batch_size=b.batch_size,
-                                  compile=getattr(b, "compile", False)),
+                                  compile=getattr(b, "compile", False),
+                                  amp=getattr(b, "amp", False),
+                                  non_blocking=getattr(b, "non_blocking", False)),
                             reason=f"mild data wait ({frac:.0%}): nudge workers to {w}",
                         )
                     )
@@ -139,7 +151,8 @@ class HeuristicBrain:
                 Trial(
                     Knobs(num_workers=b.num_workers, prefetch_factor=4,
                           persistent_workers=True, pin_memory=b.pin_memory,
-                          batch_size=b.batch_size, compile=getattr(b, "compile", False)),
+                          batch_size=b.batch_size, compile=getattr(b, "compile", False),
+                          amp=getattr(b, "amp", False), non_blocking=getattr(b, "non_blocking", False)),
                     reason=f"step-time jitter p90/p50={jitter:.2f} ≥ {JITTERY}: "
                            f"deeper prefetch absorbs straggler batches",
                 )
@@ -150,9 +163,16 @@ class HeuristicBrain:
             cands.append(
                 Trial(
                     Knobs(num_workers=b.num_workers or 2, persistent_workers=True,
-                          pin_memory=True, batch_size=b.batch_size,
-                          compile=getattr(b, "compile", False)),
-                    reason="CUDA device: pin_memory speeds host-to-device copies",
+                          pin_memory=True, non_blocking=True, batch_size=b.batch_size,
+                          compile=getattr(b, "compile", False), amp=getattr(b, "amp", False)),
+                    reason="CUDA device: pin_memory and non_blocking H2D speed up copies",
+                )
+            )
+        elif baseline.device == "cuda" and b.pin_memory and not getattr(b, "non_blocking", False):
+            cands.append(
+                Trial(
+                    Knobs(**{**b.to_dict(), "non_blocking": True}),
+                    reason="CUDA device with pin_memory: try non_blocking H2D transfers",
                 )
             )
 

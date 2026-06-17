@@ -58,6 +58,16 @@ KNOB_SPECS: dict[str, KnobSpec] = {
         "JIT compile the model using torch.compile (requires PyTorch 2.0+).",
         candidates=[True, False],
     ),
+    "amp": KnobSpec(
+        "amp",
+        "Enable Automatic Mixed Precision (AMP) to speed up training on compatible hardware.",
+        candidates=[True, False],
+    ),
+    "non_blocking": KnobSpec(
+        "non_blocking",
+        "Enable non-blocking (asynchronous) Host-to-Device memory transfers (requires pinned memory).",
+        candidates=[True, False],
+    ),
 }
 
 
@@ -72,6 +82,8 @@ class Knobs:
     batch_size: Optional[int] = None  # None -> workload default
     num_threads: Optional[int] = None  # None -> torch default (all cores)
     compile: bool = False
+    amp: bool = False
+    non_blocking: bool = False
 
     def loader_kwargs(self) -> dict[str, Any]:
         kw: dict[str, Any] = {
@@ -110,6 +122,10 @@ class Knobs:
             parts.append(f"threads={self.num_threads}")
         if getattr(self, "compile", False):
             parts.append("compiled")
+        if getattr(self, "amp", False):
+            parts.append("amp")
+        if getattr(self, "non_blocking", False):
+            parts.append("non_blocking")
         return ", ".join(parts)
 
 

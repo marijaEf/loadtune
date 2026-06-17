@@ -46,6 +46,32 @@ def generate_apply_snippet(knobs: Knobs, out_dir: Path) -> Path:
         lines.append("    return torch.compile(model)")
     else:
         lines.append("    return model  # No model configs to apply")
+
+    # Add comments/guidance for training loop modifications (AMP & non_blocking)
+    loop_guidance = []
+    if getattr(knobs, "non_blocking", False):
+        loop_guidance.append(
+            "# [non_blocking=True] active: Ensure you pass non_blocking=True to your tensor .to() calls, e.g.:\n"
+            "#   inputs = inputs.to(device, non_blocking=True)\n"
+            "#   targets = targets.to(device, non_blocking=True)"
+        )
+    if getattr(knobs, "amp", False):
+        loop_guidance.append(
+            "# [AMP] active: Wrap your training step forward pass & loss computation in autocast, e.g.:\n"
+            "#   with torch.autocast(device_type=device.type):\n"
+            "#       outputs = model(inputs)\n"
+            "#       loss = criterion(outputs, targets)"
+        )
+
+    if loop_guidance:
+        lines.extend([
+            "",
+            '"""',
+            "TRAINING LOOP OPTIMIZATIONS:",
+            "",
+            *loop_guidance,
+            '"""',
+        ])
         
     out_file.write_text("\n".join(lines) + "\n")
     return out_file

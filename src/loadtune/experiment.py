@@ -127,6 +127,7 @@ def run_trials(
     timeout_s: int = 900,
     repeats: int = 1,
     fast: bool = False,
+    baseline_result: Optional[dict] = None,
 ) -> list[Trial]:
     for i, trial in enumerate(trials):
         if on_progress:
@@ -135,6 +136,34 @@ def run_trials(
             workload_path, trial.knobs, steps, warmup,
             timeout_s=timeout_s, repeats=repeats, fast=fast,
         )
+        
+        # Verify loss parity
+        if baseline_result and trial.result and not trial.result.get("error"):
+            baseline_bs = baseline_result.get("batch_size")
+            trial_bs = trial.result.get("batch_size")
+            # Only compare if batch size is identical
+            if baseline_bs == trial_bs:
+                baseline_losses = baseline_result.get("losses", [])
+                trial_losses = trial.result.get("losses", [])
+                if baseline_losses and trial_losses:
+                    is_precision_knob = getattr(trial.knobs, "compile", False) or getattr(trial.knobs, "amp", False)
+                    threshold = 1e-2 if is_precision_knob else 1e-5
+                    
+                    for idx, (b_loss, t_loss) in enumerate(zip(baseline_losses, trial_losses)):
+                        import math
+                        if math.isnan(t_loss) or math.isinf(t_loss):
+                            trial.result["error"] = f"Validation Error: Loss is NaN/Inf at step {idx + 1}"
+                            break
+                        diff = abs(b_loss - t_loss)
+                        denom = max(abs(b_loss), 1e-9)
+                        rel_diff = diff / denom
+                        if diff > threshold and rel_diff > threshold:
+                            trial.result["error"] = (
+                                f"Validation Error: Loss parity check failed at step {idx + 1} "
+                                f"(baseline={b_loss:.6f}, trial={t_loss:.6f}, "
+                                f"diff={diff:.6f}, rel_diff={rel_diff:.1%}, threshold={threshold})"
+                            )
+                            break
     return trials
 
 
