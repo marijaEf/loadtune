@@ -9,3 +9,9 @@ data/
 loadtune_report*.md
 loadtune_report*.png
 .DS_Store
+
+# Test Reports
+test_report*
+loadtune_report*
+resnet_report*
+
