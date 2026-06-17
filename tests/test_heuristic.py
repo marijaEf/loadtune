@@ -1,7 +1,7 @@
 import pytest
 from loadtune.knobs import Knobs
 from loadtune.profiler import ProfileResult
-from loadtune.brains.heuristic import HeuristicBrain
+from loadtune.heuristic import HeuristicBrain
 
 def test_heuristic_propose_input_bound():
     brain = HeuristicBrain()

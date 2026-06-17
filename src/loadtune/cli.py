@@ -67,7 +67,7 @@ def cmd_tune(args: argparse.Namespace) -> int:
             f"data wait {baseline.data_wait_frac:.1%}, device {baseline.device}"
         )
 
-        from .brains.heuristic import HeuristicBrain
+        from .heuristic import HeuristicBrain
         brain = HeuristicBrain()
         print(f"[loadtune] using brain: heuristic")
         print(f"[loadtune] brain: {brain.name}")

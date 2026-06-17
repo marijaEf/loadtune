@@ -11,9 +11,9 @@ Signals used (all from one baseline profile):
 
 from __future__ import annotations
 
-from ..experiment import Trial
-from ..knobs import Knobs, worker_candidates
-from ..profiler import ProfileResult
+from .experiment import Trial
+from .knobs import Knobs, worker_candidates
+from .profiler import ProfileResult
 
 # Fraction of step time waiting on data above which the workload is input-bound.
 INPUT_BOUND = 0.20
