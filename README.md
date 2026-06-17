@@ -144,6 +144,14 @@ The heuristic brain's rules, beyond the worker sweep: a **CPU-saturation guard**
 
 `loadtune` is fully compatible with the open **Model Context Protocol (MCP)**, meaning you can plug it directly into AI agents (like Claude Desktop) to act as an autonomous performance engineering skill. The server exposes tools like `profile_workload` and `trial_configurations`.
 
+### Why use this?
+Instead of manually writing verbose PyTorch profiler code, guessing `num_workers` values, and staring at unreadable JSON traces, you can simply ask your AI assistant: *"Why is my PyTorch script training so slowly?"*
+The AI will use `loadtune` to:
+1. **Diagnose**: Automatically run the script and mathematically prove if your GPU is starving due to a data-wait bottleneck.
+2. **Cure**: Propose isolated trial experiments (e.g., testing 2 vs. 4 vs. 8 workers), run them in the background to measure exact throughput, and rewrite your code with the winning configuration.
+
+A 3-hour hardware debugging chore reduced to a single prompt!
+
 **For Claude Desktop:**
 Add the following to your `claude_desktop_config.json`:
 ```json
