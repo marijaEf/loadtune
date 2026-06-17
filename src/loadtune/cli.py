@@ -31,7 +31,12 @@ def _add_common(p: argparse.ArgumentParser) -> None:
 
 
 def cmd_profile(args: argparse.Namespace) -> int:
-    knobs = Knobs(num_workers=args.workers, batch_size=args.batch_size)
+    if getattr(args, "knobs", None):
+        knobs_dict = json.loads(args.knobs)
+        knobs = Knobs.from_dict(knobs_dict)
+    else:
+        knobs = Knobs(num_workers=args.workers, batch_size=args.batch_size)
+        
     print(f"[loadtune] profiling {args.workload} with {knobs.label()} ...")
     result = run_trial(args.workload, knobs, args.steps, args.warmup,
                        timeout_s=args.timeout)
@@ -146,6 +151,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p_profile = sub.add_parser("profile", help="profile a workload once")
     _add_common(p_profile)
+    p_profile.add_argument("--knobs", type=str, help="JSON string of knobs to test (overrides --workers and --batch-size)")
     p_profile.set_defaults(fn=cmd_profile)
 
     p_tune = sub.add_parser("tune", help="profile, diagnose, and trial better configs")

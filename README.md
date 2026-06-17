@@ -120,42 +120,36 @@ All configurations that alter precision or execute dynamic optimizations are val
 - **Multi-Round Tuning (`--max-rounds N`)**: Automatically repeats the tuning loop. If an input-bound bottleneck is removed, `loadtune` will profile again to catch shifting bottlenecks.
 - **Repeats (`--repeats N`)**: Measure each configuration N times. The tool will report the median throughput with min-max spread, filtering out system noise.
 
-## Use as an MCP Server (Claude Desktop & Antigravity)
+## Use as an AI Agent Skill (Claude Code & Antigravity)
 
-`loadtune` is fully compatible with the open **Model Context Protocol (MCP)**, meaning you can plug it directly into AI agents (like Claude Desktop) to act as an autonomous performance engineering skill. The server exposes tools like `profile_workload` and `trial_configurations`.
+`loadtune` is designed to be fully compatible with AI assistants that support native CLI interactions, meaning you can plug it directly into agents like Claude Code or Google Antigravity to act as an autonomous performance engineering skill.
 
 ### Why use this?
-Instead of manually writing verbose PyTorch profiler code, guessing `num_workers` values, and staring at unreadable JSON traces, you can simply ask your AI assistant: *"Why is my PyTorch script training so slowly?"*
+Instead of manually writing verbose PyTorch profiler code, guessing `num_workers` values, and staring at unreadable JSON traces, you can simply point your AI assistant at your codebase and ask: *"Why is my PyTorch script training so slowly?"*
+
 The AI will use `loadtune` to:
 1. **Diagnose**: Automatically run the script and mathematically prove if your GPU is starving due to a data-wait bottleneck.
-2. **Cure**: Propose isolated trial experiments (e.g., testing 2 vs. 4 vs. 8 workers), run them in the background to measure exact throughput, and rewrite your code with the winning configuration.
+2. **Cure**: Propose isolated trial experiments (e.g., testing 2 vs. 4 vs. 8 workers via the `--knobs` flag), run them in the background to measure exact throughput, and rewrite your code with the winning configuration.
 
 A 3-hour hardware debugging chore reduced to a single prompt!
 
-> **🧠 Note on AI Reasoning:** When used as an MCP Server, `loadtune` acts strictly as the empirical calculator—running the PyTorch scripts safely and returning the cold, hard performance metrics. The AI Agent itself acts as the brain, generating configuration hypotheses based on its pre-trained knowledge of PyTorch or any other web-search tools you provide it.
+### Installation
 
-**For Claude Desktop:**
-Add the following to your `claude_desktop_config.json`:
-```json
-{
-  "mcpServers": {
-    "loadtune": {
-      "command": "loadtune-mcp"
-    }
-  }
-}
+The prompt instructions that teach AI agents how to use `loadtune` are located in [`skills/loadtune/SKILL.md`](skills/loadtune/SKILL.md). 
+
+**For Claude Code:**
+You can just ask Claude to read the skill instructions before attempting optimizations:
+```bash
+claude "Read skills/loadtune/SKILL.md and then optimize my workloads/resnet50_cifar.py script."
 ```
 
 **For Google Antigravity:**
-You can connect to the server via standard I/O:
-```python
-from google.antigravity.mcp import StdioServerParameters, MCPClient
-
-params = StdioServerParameters(command="loadtune-mcp")
-async with MCPClient(params) as mcp:
-    await mcp.initialize()
-    # Your agent now has PyTorch profiling tools!
+Antigravity supports global skills. You can simply copy the skill to your Antigravity config directory:
+```bash
+mkdir -p ~/.gemini/config/skills/loadtune
+cp skills/loadtune/SKILL.md ~/.gemini/config/skills/loadtune/SKILL.md
 ```
+Then, Antigravity will automatically understand how to use `loadtune` whenever you ask it to profile or tune PyTorch workloads.
 
 ## Troubleshooting
 
