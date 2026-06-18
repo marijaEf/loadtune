@@ -84,9 +84,25 @@ The ResNet result is the validating one: the profile measured an 11% data-wait f
 
 A replication note: on the synthetic workload, single-trial differences between configs on the ~8,500 samples/s plateau did not replicate — with `--repeats 3`, all configs beyond `workers=2` have overlapping spreads, and an apparent thread-contention effect from a single early run turned out to be noise. The verdict logic therefore picks the cheapest statistically-tied config, and headline numbers come from repeated measurements.
 
-
-
 Add `--html` to any tune run to also get a self-contained interactive report (hover tooltips, spread bars from `--repeats`) you can share as a single file.
+
+## Results (Phase 2: NVIDIA A100, 12 vCPUs, CUDA)
+
+**ResNet-50 on Food101** (101K real JPG images, 5 GB, ImageNet-style augmentation) — the real-data stress test:
+
+| | baseline `workers=0` | tuned `workers=6, persistent` |
+|---|---|---|
+| throughput | 146.7 samples/s | **~733 samples/s (5.00x)** |
+| data wait | 82.0% of step time | minimal |
+
+With 82% data wait the A100 was idle most of the time; six persistent DataLoader workers on 12 vCPUs virtually eliminated the input bottleneck. Notably, on a free-tier Colab T4 with only 2 vCPUs, loadtune correctly reported "no better config found" — more workers cannot help when there are no spare CPU cores to run them.
+
+To reproduce on Google Colab (A100, Pro):
+
+```bash
+pip install -e ".[all]"
+loadtune tune workloads/real_food101_resnet50.py --steps 50 --max-trials 6
+```
 
 ## Writing your own workload
 
@@ -171,7 +187,7 @@ Developed on an M2 Pro. Data-wait measurements use `torch.mps.synchronize()` so 
 - [x] Heuristic vs LLM brain comparison, incl. ceiling-aware trial budgeting in the LLM prompt
 - [x] Joint knobs, first instance: `num_workers` × `torch.set_num_threads`
 - [x] Interactive HTML report (`--html`)
-- [ ] Phase 2: NVIDIA DeepLearningExamples on cloud GPUs — agent vs expert-tuned configs
+- [x] Phase 2: NVIDIA cloud GPU evaluation — 5x speedup on Food101/A100 (see [Results](#results-phase-2-nvidia-a100-12-vcpus-cuda))
 - [x] Compute-bound family: AMP, `torch.compile`, `channels_last`, fused optimizers (CUDA)
 - [x] Multi-round tuning (`--max-rounds`)
 - [x] `non_blocking` copies knob (CUDA, pairs with pin_memory)
