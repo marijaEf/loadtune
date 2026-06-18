@@ -18,6 +18,13 @@ except ImportError as e:
 
 DATA_DIR = "./data"
 
+# Pre-download the dataset at import time so subprocess trials don't
+# waste their timeout budget on a 5GB download.
+def _ensure_downloaded():
+    torchvision.datasets.Food101(DATA_DIR, split="train", download=True)
+
+_ensure_downloaded()
+
 def make_dataset():
     aug = transforms.Compose([
         transforms.RandomResizedCrop(224),
@@ -26,7 +33,7 @@ def make_dataset():
         transforms.ToTensor(),
         transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     ])
-    # Food101 automatically downloads 5GB on first run and extracts it
+    # Food101 is already cached; download=True is a no-op after first call
     return torchvision.datasets.Food101(DATA_DIR, split="train", download=True, transform=aug)
 
 def make_model() -> nn.Module:

@@ -1,8 +1,11 @@
 # loadtune
 
-**Agentic profiler & tuner for PyTorch workloads. Use this skill when the user asks to debug PyTorch DataLoader performance or optimize training throughput.** loadtune profiles your training loop, splits every step into *data wait* vs *compute*, diagnoses input-pipeline bottlenecks, and runs short isolated experiments to find a better config — for example proposing `num_workers=2` instead of `num_workers=4` when the extra workers are pure overhead.
+**Agentic profiler & tuner for PyTorch workloads — every recommendation is a measured experiment, not a suggestion.** loadtune profiles your training loop, splits every step into *data wait* vs *compute*, diagnoses input-pipeline bottlenecks, and runs short isolated experiments to find a better config — for example proposing `num_workers=2` instead of `num_workers=4` when the extra workers are pure overhead.
 
-Use it as a blazing-fast local CLI tool with deterministic rules, or plug it into your favorite AI assistant via the built-in **Agent Skill** to let an LLM autonomously debug and rewrite your PyTorch bottlenecks.
+loadtune works in two modes:
+
+- **CLI tool** — run `loadtune profile` and `loadtune tune` from your terminal for fast, deterministic, local-first results.
+- **AI Agent Skill** — drop the built-in [`SKILL.md`](skills/loadtune/SKILL.md) into Claude Code or Google Antigravity and let an LLM autonomously diagnose and fix your PyTorch bottlenecks in a single prompt.
 
 ## How it works
 
