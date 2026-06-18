@@ -50,6 +50,7 @@ def get_workload() -> Workload:
         name="dle_resnet50_mock",
         make_dataset=make_dataset,
         make_model=make_model,
+        make_optimizer=lambda m: torch.optim.SGD(m.parameters(), lr=0.1),
         train_step=train_step,
         default_batch_size=64,
         description="NVIDIA DLE ResNet50 Mock (Compute-heavy, AMP friendly)"

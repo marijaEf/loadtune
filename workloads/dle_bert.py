@@ -69,6 +69,7 @@ def get_workload() -> Workload:
         name="dle_bert_mock",
         make_dataset=make_dataset,
         make_model=make_model,
+        make_optimizer=lambda m: torch.optim.Adam(m.parameters(), lr=1e-4),
         train_step=train_step,
         default_batch_size=32,
         description="NVIDIA DLE BERT Mock (Input-heavy tokenization, Transformer compute)"
