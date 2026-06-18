@@ -2,7 +2,7 @@
 
 **Agentic profiler & tuner for ML training workloads — every recommendation is a measured experiment, not a suggestion.** loadtune profiles your training loop, splits every step into *data wait* vs *compute*, diagnoses input-pipeline bottlenecks, and runs short isolated experiments to find a better config — for example proposing `num_workers=2` instead of `num_workers=4` when the extra workers are pure overhead.
 
-Use it as a blazing-fast local CLI tool with deterministic rules, or plug it into your favorite AI assistant via the built-in **MCP Server** to let an LLM autonomously debug and rewrite your PyTorch bottlenecks.
+Use it as a blazing-fast local CLI tool with deterministic rules, or plug it into your favorite AI assistant via the built-in **Agent Skill** to let an LLM autonomously debug and rewrite your PyTorch bottlenecks.
 
 ## How it works
 
@@ -173,7 +173,7 @@ Developed on an M2 Pro. Data-wait measurements use `torch.mps.synchronize()` so 
 - [x] Multi-round tuning (`--max-rounds`)
 - [x] `non_blocking` copies knob (CUDA, pairs with pin_memory)
 - [x] Accuracy-parity check (fixed-step loss comparison) for semantics-changing knobs
-- [ ] Persist raw trial data (`--save-raw`) so reports can be regenerated without re-running
+- [x] Persist raw trial data (`--save-raw`) so reports can be regenerated without re-running
 - [x] Auto-apply (`--apply` generates a configuration snippet)
 
 ## License
