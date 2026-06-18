@@ -98,6 +98,24 @@ def cmd_tune(args: argparse.Namespace) -> int:
             
         current_knobs = best.knobs
 
+    if getattr(args, "save_raw", None):
+        raw_out = Path(args.save_raw)
+        raw_data = {
+            "baseline": original_baseline.to_dict() if hasattr(original_baseline, "to_dict") else vars(original_baseline),
+            "trials": [
+                {
+                    "knobs": t.knobs.to_dict(),
+                    "reason": t.reason,
+                    "result": t.result
+                }
+                for t in all_trials
+            ],
+            "brain_name": brain.name,
+            "narrative": brain.explain(original_baseline, all_trials)
+        }
+        raw_out.write_text(json.dumps(raw_data, indent=2))
+        print(f"[loadtune] raw data written to {raw_out}")
+
     out = Path(args.out)
     plot_files: list[str] = []
     if args.plots:
@@ -142,6 +160,61 @@ def cmd_tune(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_report(args: argparse.Namespace) -> int:
+    raw_file = Path(args.raw_file)
+    if not raw_file.exists():
+        print(f"[loadtune] error: {raw_file} not found")
+        return 1
+
+    try:
+        raw_data = json.loads(raw_file.read_text())
+        original_baseline = ProfileResult(**raw_data["baseline"])
+        
+        all_trials = []
+        for t_dict in raw_data.get("trials", []):
+            knobs = Knobs.from_dict(t_dict["knobs"])
+            trial = Trial(knobs=knobs, reason=t_dict.get("reason", ""))
+            trial.result = t_dict.get("result")
+            all_trials.append(trial)
+            
+        brain_name = raw_data.get("brain_name", "unknown")
+        narrative = raw_data.get("narrative", "")
+    except Exception as e:
+        print(f"[loadtune] error parsing {raw_file}: {e}")
+        return 1
+
+    out = Path(args.out)
+    plot_files: list[str] = []
+    if args.plots:
+        try:
+            from .plots import generate_plots
+
+            paths = generate_plots(
+                original_baseline, all_trials, best_trial(all_trials),
+                out_dir=out.parent if str(out.parent) else Path("."),
+                prefix=out.stem,
+            )
+            plot_files = [p.name for p in paths]
+            print(f"[loadtune] charts: {', '.join(plot_files)}")
+        except ImportError:
+            print("[loadtune] matplotlib not installed; skipping charts")
+
+    report = render_report(original_baseline, all_trials, brain_name, narrative, plot_files)
+    out.write_text(report)
+    print(f"[loadtune] report written to {out}")
+
+    if args.html:
+        from .report_html import render_html_report
+
+        html_out = out.with_suffix(".html")
+        html_out.write_text(
+            render_html_report(original_baseline, all_trials, brain_name, narrative)
+        )
+        print(f"[loadtune] interactive report written to {html_out}")
+
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="loadtune",
@@ -183,7 +256,24 @@ def main(argv: list[str] | None = None) -> int:
         "--fast", action="store_true",
         help="run trials in-process to avoid process startup overhead",
     )
+    p_tune.add_argument(
+        "--save-raw", type=str,
+        help="save raw trial metrics to a JSON file",
+    )
     p_tune.set_defaults(fn=cmd_tune)
+
+    p_report = sub.add_parser("report", help="generate a report from raw JSON data")
+    p_report.add_argument("raw_file", help="path to raw data JSON file")
+    p_report.add_argument("--out", default="loadtune_report.md")
+    p_report.add_argument(
+        "--no-plots", dest="plots", action="store_false", default=True,
+        help="skip chart generation (on by default; needs matplotlib)",
+    )
+    p_report.add_argument(
+        "--html", action="store_true",
+        help="also write a self-contained interactive HTML report",
+    )
+    p_report.set_defaults(fn=cmd_report)
 
     args = parser.parse_args(argv)
     return args.fn(args)
