@@ -74,6 +74,9 @@ class CIFAR10DataModule(L.LightningDataModule):
 
 
 def get_workload() -> Workload:
+    # Pre-download CIFAR-10 before loadtune spawns subprocess trials.
+    torchvision.datasets.CIFAR10("./data", train=True, download=True)
+
     module = SimpleCNN()
     datamodule = CIFAR10DataModule()
     return from_lightning(module, datamodule=datamodule, batch_size=64)
