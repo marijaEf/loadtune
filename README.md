@@ -90,18 +90,30 @@ Add `--html` to any tune run to also get a self-contained interactive report (ho
 
 **ResNet-50 on Food101** (101K real JPG images, 5 GB, ImageNet-style augmentation) — the real-data stress test:
 
+**Single-round tuning** (`--max-trials 6`):
+
 | | baseline `workers=0` | tuned `workers=6, persistent` |
 |---|---|---|
-| throughput | 146.7 samples/s | **~733 samples/s (5.00x)** |
-| data wait | 82.0% of step time | minimal |
+| throughput | 147 samples/s | **733 samples/s (5.00x)** |
+| data wait | 82% of step time | 7.6% |
 
-With 82% data wait the A100 was idle most of the time; six persistent DataLoader workers on 12 vCPUs virtually eliminated the input bottleneck. Notably, on a free-tier Colab T4 with only 2 vCPUs, loadtune correctly reported "no better config found" — more workers cannot help when there are no spare CPU cores to run them.
+**Multi-round tuning** (`--max-rounds 2 --auto-batch`):
+
+| Round | Baseline | Best | What changed |
+|-------|----------|------|--------------|
+| 1 | 147 samples/s (82% data wait) | 733 samples/s | workers=6 fixes input bottleneck |
+| 2 | 733 samples/s (7.6% data wait) | **831 samples/s (5.65x)** | +pin_memory +non_blocking squeezes H2D transfers |
+
+Round 1 removed the input bottleneck; round 2 re-profiled the now-faster pipeline and found the exposed host-to-device transfer overhead. Notably, on a free-tier Colab T4 with only 2 vCPUs, loadtune correctly reported "no better config found" — more workers cannot help when there are no spare CPU cores.
 
 To reproduce on Google Colab (A100, Pro):
 
 ```bash
 pip install -e ".[all]"
+# Single round:
 loadtune tune workloads/real_food101_resnet50.py --steps 50 --max-trials 6
+# Multi-round with batch-size auto-scaling:
+loadtune tune workloads/real_food101_resnet50.py --steps 50 --max-trials 6 --max-rounds 2 --auto-batch
 ```
 
 ## Writing your own workload
