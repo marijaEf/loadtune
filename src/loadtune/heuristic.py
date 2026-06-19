@@ -30,7 +30,7 @@ MANY_WORKERS = 4
 class HeuristicBrain:
     name = "heuristic"
 
-    def propose(self, baseline: ProfileResult, max_trials: int) -> list[Trial]:
+    def propose(self, baseline: ProfileResult, max_trials: int, auto_batch: bool = False) -> list[Trial]:
         b = Knobs.from_dict(baseline.knobs)
         frac = baseline.data_wait_frac
         cpu = baseline.cpu_util_mean
@@ -176,7 +176,48 @@ class HeuristicBrain:
                 )
             )
 
+        # Batch size auto-scaling: only when explicitly enabled via --auto-batch
+        if auto_batch:
+            cands.extend(self._propose_batch_size(baseline, b))
+
         return cands[:max_trials]
+
+    def _propose_batch_size(self, baseline: ProfileResult, b: Knobs) -> list[Trial]:
+        """Propose larger batch sizes when GPU memory is underutilized.
+        
+        Only fires when the workload is compute-bound (data wait < 5%)
+        and GPU memory utilization is below 60%. Doubles batch size up to
+        the point where utilization would approach 80%.
+        """
+        trials = []
+        mem_util = getattr(baseline, "gpu_mem_utilization", None)
+        if mem_util is None:
+            return trials  # no memory data (CPU/MPS) — skip
+        
+        if baseline.data_wait_frac > HEALTHY:
+            return trials  # input-bound — bigger batches would make it worse
+        
+        if mem_util >= 0.6:
+            return trials  # already using most of the GPU memory
+        
+        # Propose doubling: current -> 2x -> 4x, stopping at ~80% projected utilization
+        current_bs = baseline.batch_size
+        projected_util = mem_util
+        for multiplier in [2, 4]:
+            new_bs = current_bs * multiplier
+            # Linear projection: doubling batch_size roughly doubles memory
+            projected_util = mem_util * multiplier
+            if projected_util >= 0.8:
+                break
+            trials.append(
+                Trial(
+                    Knobs(**{**b.to_dict(), "batch_size": new_bs}),
+                    reason=f"GPU memory {mem_util:.0%} utilized, "
+                           f"batch_size {current_bs}→{new_bs} "
+                           f"(projected ~{projected_util:.0%} utilization)",
+                )
+            )
+        return trials
 
     def explain(self, baseline: ProfileResult, trials: list[Trial]) -> str:
         frac = baseline.data_wait_frac
@@ -206,4 +247,10 @@ class HeuristicBrain:
             if cpu is not None and not (frac >= INPUT_BOUND and cpu >= CPU_SATURATED)
             else ""
         )
-        return verdict + cpu_note
+        mem_util = getattr(baseline, "gpu_mem_utilization", None)
+        mem_note = (
+            f" Peak GPU memory utilization was {mem_util:.0%}."
+            if mem_util is not None
+            else ""
+        )
+        return verdict + cpu_note + mem_note

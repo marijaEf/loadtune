@@ -70,6 +70,9 @@ class ProfileResult:
     repeats: int = 1
     throughput_min: Optional[float] = None
     throughput_max: Optional[float] = None
+    gpu_mem_peak_mb: Optional[float] = None       # peak allocated GPU memory (MB)
+    gpu_mem_total_mb: Optional[float] = None      # total device memory (MB)
+    gpu_mem_utilization: Optional[float] = None   # peak / total (0.0–1.0)
 
     def to_dict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
@@ -140,44 +143,78 @@ def profile_session(
         done = 0
         total_needed = warmup + steps
 
-        while done < total_needed:
-            t_fetch = time.perf_counter()
-            try:
-                batch = next(it)
-            except StopIteration:
-                it = iter(loader)
-                continue
-            t_got = time.perf_counter()
+        # Reset peak memory stats before the training loop
+        if device.type == "cuda":
+            torch.cuda.reset_peak_memory_stats(device)
 
-            if getattr(knobs, "amp", False) and device.type in ("cuda", "cpu"):
-                amp_dtype = torch.bfloat16 if device.type == "cpu" else torch.float16
-                with torch.autocast(device_type=device.type, dtype=amp_dtype):
-                    loss = workload.train_step(model, optimizer, batch, device)
-            else:
-                loss = workload.train_step(model, optimizer, batch, device)
+        gpu_mem_peak_mb: Optional[float] = None
+        gpu_mem_total_mb: Optional[float] = None
+        gpu_mem_utilization: Optional[float] = None
 
-            device_sync(device)
-            t_done = time.perf_counter()
+        try:
+            while done < total_needed:
+                t_fetch = time.perf_counter()
+                try:
+                    batch = next(it)
+                except StopIteration:
+                    it = iter(loader)
+                    continue
+                t_got = time.perf_counter()
 
-            # Record loss for first 5 steps
-            if len(step_losses) < 5:
-                if isinstance(loss, torch.Tensor):
-                    loss_val = float(loss.detach().cpu().item())
-                elif isinstance(loss, (int, float)):
-                    loss_val = float(loss)
+                if getattr(knobs, "amp", False) and device.type in ("cuda", "cpu"):
+                    amp_dtype = torch.bfloat16 if device.type == "cpu" else torch.float16
+                    with torch.autocast(device_type=device.type, dtype=amp_dtype):
+                        loss = workload.train_step(model, optimizer, batch, device)
                 else:
-                    loss_val = 0.0
-                step_losses.append(loss_val)
+                    loss = workload.train_step(model, optimizer, batch, device)
 
-            done += 1
-            if done > warmup:
-                data_wait += t_got - t_fetch
-                compute += t_done - t_got
-                step_times.append((t_done - t_fetch) * 1000)
-                step_waits_ms.append(round((t_got - t_fetch) * 1000, 3))
-                step_computes_ms.append(round((t_done - t_got) * 1000, 3))
-                if psutil and done % 5 == 0:
-                    cpu_samples.append(psutil.cpu_percent(interval=None))
+                device_sync(device)
+                t_done = time.perf_counter()
+
+                # Record loss for first 5 steps
+                if len(step_losses) < 5:
+                    if isinstance(loss, torch.Tensor):
+                        loss_val = float(loss.detach().cpu().item())
+                    elif isinstance(loss, (int, float)):
+                        loss_val = float(loss)
+                    else:
+                        loss_val = 0.0
+                    step_losses.append(loss_val)
+
+                done += 1
+                if done > warmup:
+                    data_wait += t_got - t_fetch
+                    compute += t_done - t_got
+                    step_times.append((t_done - t_fetch) * 1000)
+                    step_waits_ms.append(round((t_got - t_fetch) * 1000, 3))
+                    step_computes_ms.append(round((t_done - t_got) * 1000, 3))
+                    if psutil and done % 5 == 0:
+                        cpu_samples.append(psutil.cpu_percent(interval=None))
+        except RuntimeError as e:
+            if "out of memory" in str(e).lower():
+                # Clean up GPU memory
+                if device.type == "cuda":
+                    torch.cuda.empty_cache()
+                return ProfileResult(
+                    workload=workload.name,
+                    knobs=knobs.to_dict(),
+                    device=device.type,
+                    num_cpus=num_cpus,
+                    steps=0,
+                    batch_size=batch_size,
+                    total_s=0, data_wait_s=0, compute_s=0, startup_s=round(startup_s, 4),
+                    throughput=0, data_wait_frac=0,
+                    step_time_p50_ms=0, step_time_p90_ms=0,
+                    cpu_util_mean=None,
+                    error=f"OOM: batch_size={batch_size} exceeded GPU memory",
+                )
+            raise  # re-raise non-OOM RuntimeErrors
+
+        # Measure GPU memory after training loop
+        if device.type == "cuda":
+            gpu_mem_peak_mb = torch.cuda.max_memory_allocated(device) / (1024 ** 2)
+            gpu_mem_total_mb = torch.cuda.get_device_properties(device).total_mem / (1024 ** 2)
+            gpu_mem_utilization = gpu_mem_peak_mb / gpu_mem_total_mb if gpu_mem_total_mb > 0 else None
 
         total = data_wait + compute
         return ProfileResult(
@@ -205,6 +242,9 @@ def profile_session(
             step_data_wait_ms=step_waits_ms,
             step_compute_ms=step_computes_ms,
             losses=step_losses,
+            gpu_mem_peak_mb=gpu_mem_peak_mb,
+            gpu_mem_total_mb=gpu_mem_total_mb,
+            gpu_mem_utilization=gpu_mem_utilization,
         )
     finally:
         if non_blocking_active:

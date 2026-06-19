@@ -76,7 +76,8 @@ def cmd_tune(args: argparse.Namespace) -> int:
         brain = HeuristicBrain()
         print(f"[loadtune] using brain: heuristic")
         print(f"[loadtune] brain: {brain.name}")
-        trials = brain.propose(baseline, max_trials=args.max_trials)
+        trials = brain.propose(baseline, max_trials=args.max_trials,
+                               auto_batch=getattr(args, "auto_batch", False))
         if not trials:
             print("[loadtune] brain proposed no trials — baseline looks fine.")
             break
@@ -259,6 +260,10 @@ def main(argv: list[str] | None = None) -> int:
     p_tune.add_argument(
         "--save-raw", type=str,
         help="save raw trial metrics to a JSON file",
+    )
+    p_tune.add_argument(
+        "--auto-batch", action="store_true",
+        help="enable batch-size auto-scaling when GPU memory is underutilized",
     )
     p_tune.set_defaults(fn=cmd_tune)
 

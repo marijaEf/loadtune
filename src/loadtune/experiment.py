@@ -78,8 +78,13 @@ def run_trial(
             return json.loads(line[len("LOADTUNE_RESULT "):])
             
     if proc.returncode < 0:
+        sig = -proc.returncode
+        if sig == 9:
+            error_msg = "trial killed by OS (SIGKILL) — likely OOM"
+        else:
+            error_msg = f"trial process died with signal {sig}"
         return {
-            "error": f"trial process died with signal {-proc.returncode} (possible OOM)",
+            "error": error_msg,
             "stdout_tail": proc.stdout[-2000:],
             "stderr_tail": proc.stderr[-2000:],
         }
