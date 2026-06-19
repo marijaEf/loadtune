@@ -143,6 +143,13 @@ All configurations that alter precision or execute dynamic optimizations are val
 
 `loadtune` is designed to be fully compatible with AI assistants that support native CLI interactions, meaning you can plug it directly into agents like Claude Code or Google Antigravity to act as an autonomous performance engineering skill.
 
+> [!IMPORTANT]
+> **The skill file is not standalone.** [`SKILL.md`](skills/loadtune/SKILL.md) is a *prompt document* that teaches an AI agent which `loadtune` CLI commands to run and how to interpret their output. It does **not** contain the profiling or tuning logic itself — that lives in the pip-installable `loadtune` package. You must install the package first:
+> ```bash
+> pip install -e ".[all]"  # or pip install loadtune
+> ```
+> Then register the skill with your agent (see below). The agent will call `loadtune profile` and `loadtune tune` as CLI commands under the hood.
+
 ### Why use this?
 Instead of manually writing verbose PyTorch profiler code, guessing `num_workers` values, and staring at unreadable JSON traces, you can simply point your AI assistant at your codebase and ask: *"Why is my PyTorch script training so slowly?"*
 
@@ -152,18 +159,21 @@ The AI will use `loadtune` to:
 
 A 3-hour hardware debugging chore reduced to a single prompt!
 
-### Installation
+### Setup
 
-The prompt instructions that teach AI agents how to use `loadtune` are located in [`skills/loadtune/SKILL.md`](skills/loadtune/SKILL.md). 
+**Step 1 — Install the package** (required):
+```bash
+pip install -e ".[all]"
+```
+
+**Step 2 — Register the skill** with your agent:
 
 **For Claude Code:**
-You can just ask Claude to read the skill instructions before attempting optimizations:
 ```bash
 claude "Read skills/loadtune/SKILL.md and then optimize my workloads/resnet50_cifar.py script."
 ```
 
 **For Google Antigravity:**
-Antigravity supports global skills. You can simply copy the skill to your Antigravity config directory:
 ```bash
 mkdir -p ~/.gemini/config/skills/loadtune
 cp skills/loadtune/SKILL.md ~/.gemini/config/skills/loadtune/SKILL.md
