@@ -150,6 +150,55 @@ All configurations that alter precision or execute dynamic optimizations are val
 - **Fast Mode (`--fast`)**: Runs tuning trials in-process instead of spawning fresh Python subprocesses. This drastically reduces trial startup overhead for workloads with massive models or datasets, but sacrifices some memory isolation.
 - **Multi-Round Tuning (`--max-rounds N`)**: Automatically repeats the tuning loop. If an input-bound bottleneck is removed, `loadtune` will profile again to catch shifting bottlenecks.
 - **Repeats (`--repeats N`)**: Measure each configuration N times. The tool will report the median throughput with min-max spread, filtering out system noise.
+- **Batch-Size Auto-Scaling (`--auto-batch`)**: When enabled, proposes larger batch sizes if GPU memory utilization is below 60% and the workload is compute-bound.
+
+## Framework Integrations
+
+loadtune provides adapters for **PyTorch Lightning** and **HuggingFace Transformers** so you don't need to write a `Workload` boilerplate file. Each adapter extracts dataset, model, optimizer, and train_step from your framework objects:
+
+**PyTorch Lightning:**
+```python
+from loadtune import from_lightning, tune
+
+workload = from_lightning(my_lightning_module, datamodule=my_datamodule, batch_size=64)
+result = tune(workload, steps=50)
+print(f"Best: {result.best.knobs.label()} — {result.speedup:.2f}x")
+```
+
+**HuggingFace Transformers:**
+```python
+from loadtune import from_hf_trainer, tune
+
+workload = from_hf_trainer(model, dataset, tokenizer=tokenizer, batch_size=32)
+result = tune(workload, steps=50)
+```
+
+Install the optional dependencies:
+```bash
+pip install -e ".[lightning]"   # PyTorch Lightning
+pip install -e ".[nlp]"         # HuggingFace Transformers
+pip install -e ".[all]"         # everything
+```
+
+See [`workloads/lightning_cifar10.py`](workloads/lightning_cifar10.py) and [`workloads/hf_sentiment.py`](workloads/hf_sentiment.py) for full examples.
+
+## Python API
+
+For programmatic use (notebooks, scripts, CI), use `profile()` and `tune()` directly — no CLI required:
+
+```python
+from loadtune import Workload, profile, tune
+
+# Profile a workload
+result = profile(my_workload, steps=50)
+print(f"Throughput: {result.throughput:.1f} samples/s, data wait: {result.data_wait_frac:.1%}")
+print(f"GPU memory: {result.gpu_mem_utilization:.0%}" if result.gpu_mem_utilization else "")
+
+# Tune a workload
+result = tune(my_workload, steps=50, max_trials=6, auto_batch=True)
+print(f"Best: {result.best.knobs.label()} — {result.speedup:.2f}x baseline")
+print(result.diagnosis)
+```
 
 ## Use as an AI Agent Skill (Claude Code & Antigravity)
 
@@ -216,6 +265,8 @@ Developed on an M2 Pro. Data-wait measurements use `torch.mps.synchronize()` so 
 - [x] Accuracy-parity check (fixed-step loss comparison) for semantics-changing knobs
 - [x] Persist raw trial data (`--save-raw`) so reports can be regenerated without re-running
 - [x] Auto-apply (`--apply` generates a configuration snippet)
+- [x] Phase 3: GPU memory profiling, batch-size auto-scaling (`--auto-batch`), OOM recovery
+- [x] Phase 4: Framework integrations (PyTorch Lightning, HuggingFace Trainer) + Python API
 
 ## License
 
