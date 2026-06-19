@@ -213,7 +213,7 @@ def profile_session(
         # Measure GPU memory after training loop
         if device.type == "cuda":
             gpu_mem_peak_mb = torch.cuda.max_memory_allocated(device) / (1024 ** 2)
-            gpu_mem_total_mb = torch.cuda.get_device_properties(device).total_mem / (1024 ** 2)
+            gpu_mem_total_mb = torch.cuda.get_device_properties(device).total_memory / (1024 ** 2)
             gpu_mem_utilization = gpu_mem_peak_mb / gpu_mem_total_mb if gpu_mem_total_mb > 0 else None
 
         total = data_wait + compute
