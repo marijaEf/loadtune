@@ -94,8 +94,10 @@ def from_hf_trainer(
     # --- Training step wrapper ---
     # HF models expect dict-style batches and return ModelOutput with .loss
     def train_step(m, optimizer, batch, device):
+        from collections.abc import Mapping
+
         # Move dict batch to device
-        if isinstance(batch, dict):
+        if isinstance(batch, Mapping):
             batch = {
                 k: v.to(device, non_blocking=True) if hasattr(v, "to") else v
                 for k, v in batch.items()
