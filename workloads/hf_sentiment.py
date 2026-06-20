@@ -32,7 +32,7 @@ def get_workload() -> Workload:
     )
 
     # Load and tokenize SST-2
-    dataset = load_dataset("glue", "sst2", split="train[:2000]")
+    dataset = load_dataset("nyu-mll/glue", "sst2", split="train[:2000]")
     dataset = dataset.map(
         lambda x: tokenizer(
             x["sentence"], truncation=True, padding="max_length", max_length=128,
