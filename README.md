@@ -11,6 +11,17 @@ Tuning PyTorch DataLoaders (`num_workers`, `pin_memory`, `prefetch_factor`, thre
 
 `loadtune` replaces guesswork with empirical measurement. It profiles your code, detects the exact bottleneck (Input-Bound vs Compute-Bound), and tunes the hardware mechanics to maximize samples per second.
 
+### Why loadtune? (System Parameters vs. Hyperparameters)
+
+Most ML engineers are familiar with tools like Weights & Biases (W&B) Sweeps or Optuna. These tools perform **Hyperparameter Optimization (HPO)**—sweeping learning rates and dropout to maximize *model accuracy* over days of training.
+
+`loadtune` solves the other half of the equation: **System Parameter Optimization**. It sweeps hardware mechanics to maximize *hardware throughput* in just 2 minutes. 
+
+A standard ML workflow uses both:
+1. Run **`loadtune`** for 2 minutes to lock in the absolute fastest data pipeline for your specific hardware instance.
+2. Plug that optimized system config into your training script.
+3. Kick off a massive **W&B Sweep** overnight to find the best hyperparameters, safe in the knowledge that every run in that sweep is executing 5x faster than it would have otherwise.
+
 ### Currently Supported Hardware
 
 `loadtune` is hardware-aware and adjusts its heuristics based on your accelerator:
