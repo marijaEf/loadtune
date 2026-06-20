@@ -11,6 +11,13 @@ Tuning PyTorch DataLoaders (`num_workers`, `pin_memory`, `prefetch_factor`, thre
 
 `loadtune` replaces guesswork with empirical measurement. It profiles your code, detects the exact bottleneck (Input-Bound vs Compute-Bound), and tunes the hardware mechanics to maximize samples per second.
 
+### Supported Hardware
+
+`loadtune` is hardware-aware and adjusts its heuristics based on your accelerator:
+- **NVIDIA GPUs (CUDA):** Full support. Automatically tracks GPU memory utilization (`--auto-batch`), tests asynchronous transfers (`pin_memory`, `non_blocking`), and handles CUDA OOMs.
+- **Apple Silicon (MPS):** Full pipeline tuning. `loadtune` recognizes the unified memory architecture (e.g., skips `pin_memory` as it's a no-op on Mac) and accurately synchronizes the MPS stream for honest compute timings.
+- **CPUs:** Full pipeline tuning. Automatically limits `torch.set_num_threads` to prevent contention between DataLoader workers and the main process.
+
 ---
 
 ## Real-World Results
