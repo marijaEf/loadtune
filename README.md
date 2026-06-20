@@ -182,6 +182,14 @@ pip install -e ".[all]"         # everything
 
 See [`workloads/lightning_cifar10.py`](workloads/lightning_cifar10.py) and [`workloads/hf_sentiment.py`](workloads/hf_sentiment.py) for full examples.
 
+### Framework Integration Results
+
+Tuning the provided examples (on a Colab T4 GPU) reveals how `loadtune` handles different architectural bottlenecks:
+
+- **Lightning CNN (CIFAR-10):** 95.7% data wait (highly input-bound). `loadtune` scaled to `workers=4` with persistent workers, achieving a **4.25x speedup** (1,477 → 6,279 samples/s).
+- **HuggingFace DistilBERT (SST-2):** 5.9% data wait (highly compute-bound). `loadtune` correctly identified this, only applying a mild nudge to `workers=2` alongside `pin_memory` and `non_blocking` for a free **1.06x speedup** without wasting time testing massive worker counts.
+
+
 ## Python API
 
 For programmatic use (notebooks, scripts, CI), use `profile()` and `tune()` directly — no CLI required:
