@@ -1,281 +1,117 @@
-# loadtune
+# loadtune 🚀
 
-**Agentic profiler & tuner for PyTorch workloads — every recommendation is a measured experiment, not a suggestion.** loadtune profiles your training loop, splits every step into *data wait* vs *compute*, diagnoses input-pipeline bottlenecks, and runs short isolated experiments to find a better config — for example proposing `num_workers=2` instead of `num_workers=4` when the extra workers are pure overhead.
+**An agentic profiler and tuner for ML workloads.**
 
-loadtune works in two modes:
+`loadtune` is a deterministic, hardware-aware AI agent that autonomously runs micro-experiments to find the optimal system configuration for your ML pipeline, ensuring your GPUs are never sitting idle.
 
-- **CLI tool** — run `loadtune profile` and `loadtune tune` from your terminal for fast, deterministic, local-first results.
-- **AI Agent Skill** — drop the built-in [`SKILL.md`](skills/loadtune/SKILL.md) into Claude Code or Google Antigravity and let an LLM autonomously diagnose and fix your PyTorch bottlenecks in a single prompt.
+## The Problem: GPU Starvation
 
-## How it works
+GPUs are incredibly fast, but they often sit idle waiting for the CPU to decode and augment data. 
+Tuning PyTorch DataLoaders (`num_workers`, `pin_memory`, `prefetch_factor`, thread constraints) is tedious, undocumented, and hardware-dependent. Guessing these configurations often leads to silent **GPU starvation**, where expensive instances (like A100s) waste 80% of their time waiting for data.
 
-```
-baseline profile ──▶ heuristic rules ──▶ trials ──▶ report
-     │                                     │
-     │                                     │
-     │                           each trial runs in a
-     │                           fresh subprocess for
-     └─ data-wait vs compute split, clean measurements
-        CPU util, step-time percentiles
-```
+`loadtune` replaces guesswork with empirical measurement. It profiles your code, detects the exact bottleneck (Input-Bound vs Compute-Bound), and tunes the hardware mechanics to maximize samples per second.
 
-Every proposed config is **verified by measurement**, never just suggested. The report shows throughput per trial, speedup vs baseline, why each config was tried, and charts of where each step's time goes.
+---
 
-## The tuning methodology
+## Real-World Results
 
-![Structured tuning loop](docs/tuning-loop.svg)
+`loadtune` autonomously found these speedups in under 2 minutes of tuning:
 
-Many knobs can affect training throughput, but searching their joint space is intractable and unnecessary. loadtune follows a **bottleneck-driven loop** instead:
+- **NVIDIA A100 (Food101 Vision):** 90% data-wait (Input-bound). Scaled workers and pinned memory. **5.65x speedup** (147 → 830 samples/s).
+- **Colab T4 (Lightning CNN):** 95.7% data-wait (Highly input-bound). Handled framework overhead perfectly. **4.25x speedup** (1,477 → 6,279 samples/s).
+- **Colab T4 (HuggingFace DistilBERT):** 5.9% data-wait (Compute-bound). Recognized the edge case and applied a mild nudge (`workers=2`, `non_blocking`) for a free **1.06x speedup** without wasting time testing massive worker counts.
+- **Apple M2 Pro (Synthetic Vision):** Unified memory constraints. **2.11x speedup** (199 → 421 samples/s).
 
-1. **Profile** — a short instrumented run splits every step into *data wait* (accelerator idle) vs *compute*.
-2. **Classify the bottleneck** — input-bound, compute-bound, or transfer/memory-bound. Only the matching knob family enters the search; tuning `torch.compile` on an input-bound job is wasted effort.
-3. **Trial candidates** — short, subprocess-isolated runs measure each proposal. Within a family, independent knobs get coordinate descent; interacting knobs (e.g. `num_workers` × intra-op threads) are trialed jointly — where the LLM brain prunes the grid by reasoning about the hardware.
-4. **Adopt the cheapest config within noise tolerance** of the best throughput — `num_workers=2` beats `num_workers=8` when they're statistically tied.
-5. **Re-profile and repeat** — removing one bottleneck exposes the next (a job that was 49% input-bound becomes compute-bound once workers saturate the pipeline). Stop when expected gain no longer justifies trial cost. Math-preserving knobs need only throughput; semantics-changing knobs (batch size, AMP) additionally gate on a fixed-step loss-parity check.
+---
 
-v0.1 implements one iteration of this loop for the input-pipeline knob family; further families and multi-round tuning are on the roadmap.
+## Getting Started
 
-## Install
+### 1. Setup
 
 ```bash
-pip install -e ".[vision]"        # core + torchvision workloads
-pip install -e ".[all]"           # all workloads + tests
+pip install loadtune
 ```
-
-## Quickstart (no downloads needed)
-
+Optional dependencies for framework integrations:
 ```bash
-# 1. Profile the deliberately input-bound synthetic workload
-loadtune profile workloads/synthetic_bottleneck.py --steps 50
-
-# 2. Let the agent tune it
-loadtune tune workloads/synthetic_bottleneck.py --steps 50 --out report.md
+pip install "loadtune[lightning]"  # PyTorch Lightning
+pip install "loadtune[nlp]"        # HuggingFace Transformers
+pip install "loadtune[all]"        # Everything
 ```
 
-Then the real one:
+### 2. How to Run (Three Scenarios)
 
-```bash
-loadtune tune workloads/resnet50_cifar.py --steps 100 --out resnet_report.md
-```
-
-## Results (Phase 1: Apple M2 Pro, 10 cores, MPS)
-
-**Synthetic input-bound workload** (small CNN, deliberately heavy CPU augmentation) — the stress case:
-
-| | baseline `workers=0` | tuned `workers=2` |
-|---|---|---|
-| throughput | 4,017 samples/s | **8,479 samples/s (2.11x)** |
-| data wait | 48% of step time | 2.6% |
-
-*(medians of 3 runs; full spreads in [results/synthetic_repeats.md](results/synthetic_repeats.md))*
-
-**ResNet-50 on CIFAR-10** (224px, heavy augmentation) — the realistic case:
-
-| | baseline `workers=0` | tuned `workers=2` |
-|---|---|---|
-| throughput | 68.4 samples/s | **78.2 samples/s (1.14x)** |
-| data wait | 10.8% of step time | 0.1% |
-
-The ResNet result is the validating one: the profile measured an 11% data-wait fraction, which bounds the input-side speedup at ~1.12x — the agent proposed a single cheap trial, claimed the full ceiling, and stopped instead of sweeping knobs that cannot help.
-
-![ResNet-50 step timeline, baseline vs tuned](results/resnet_report_timeline.png)
-
-*The red band is time the accelerator spends idle, waiting for data. Two DataLoader workers remove it entirely; what remains is pure compute.*
-
-A replication note: on the synthetic workload, single-trial differences between configs on the ~8,500 samples/s plateau did not replicate — with `--repeats 3`, all configs beyond `workers=2` have overlapping spreads, and an apparent thread-contention effect from a single early run turned out to be noise. The verdict logic therefore picks the cheapest statistically-tied config, and headline numbers come from repeated measurements.
-
-Add `--html` to any tune run to also get a self-contained interactive report (hover tooltips, spread bars from `--repeats`) you can share as a single file.
-
-## Results (Phase 2: NVIDIA A100, 12 vCPUs, CUDA)
-
-**ResNet-50 on Food101** (101K real JPG images, 5 GB, ImageNet-style augmentation) — the real-data stress test:
-
-**Single-round tuning** (`--max-trials 6`):
-
-| | baseline `workers=0` | tuned `workers=6, persistent` |
-|---|---|---|
-| throughput | 147 samples/s | **733 samples/s (5.00x)** |
-| data wait | 82% of step time | 7.6% |
-
-**Multi-round tuning** (`--max-rounds 2 --auto-batch`):
-
-| Round | Baseline | Best | What changed |
-|-------|----------|------|--------------|
-| 1 | 147 samples/s (82% data wait) | 733 samples/s | workers=6 fixes input bottleneck |
-| 2 | 733 samples/s (7.6% data wait) | **831 samples/s (5.65x)** | +pin_memory +non_blocking squeezes H2D transfers |
-
-Round 1 removed the input bottleneck; round 2 re-profiled the now-faster pipeline and found the exposed host-to-device transfer overhead. Notably, on a free-tier Colab T4 with only 2 vCPUs, loadtune correctly reported "no better config found" — more workers cannot help when there are no spare CPU cores.
-
-To reproduce on Google Colab (A100, Pro):
-
-```bash
-pip install -e ".[all]"
-# Single round:
-loadtune tune workloads/real_food101_resnet50.py --steps 50 --max-trials 6
-# Multi-round with batch-size auto-scaling:
-loadtune tune workloads/real_food101_resnet50.py --steps 50 --max-trials 6 --max-rounds 2 --auto-batch
-```
-
-## Writing your own workload
-
-A workload is one Python file with a `get_workload()` function — loadtune owns the DataLoader so it can tune it; you supply dataset, model, and a train step:
-
-```python
-from loadtune import Workload
-
-def get_workload() -> Workload:
-    return Workload(
-        name="my_model",
-        make_dataset=...,            # () -> Dataset
-        make_model=...,              # () -> nn.Module
-        make_optimizer=...,          # (model) -> Optimizer
-        train_step=...,              # (model, opt, batch, device) -> loss
-        default_batch_size=32,
-    )
-```
-
-## Knobs tuned in v1
-
-`num_workers`, `prefetch_factor`, `persistent_workers`, `pin_memory` (CUDA only — it's a no-op on Apple Silicon's unified memory), `num_threads` (intra-op threads, trialed jointly with worker counts since they compete for cores), `compile` (`torch.compile`), `amp` (Automatic Mixed Precision), `non_blocking` (asynchronous copies to CUDA device), and optionally `batch_size`.
-
-The heuristic brain's rules, beyond the worker sweep: a **CPU-saturation guard** (input-bound + cores maxed → more workers can't help; the diagnosis says so instead of proposing futile trials), a **jitter rule** (p90/p50 step time ≥ 1.5 with active workers → deeper prefetch to absorb stragglers), **worker×thread pairing** (4+ workers → paired trial capping main-process intra-op threads to the leftover cores), **AMP and compilation** rules when compute-bound, and **asynchronous memory transfers** validation on CUDA machines with pinned memory.
-
-All configurations that alter precision or execute dynamic optimizations are validated against a **Loss Parity Check** to ensure mathematical and convergence correctness before recommendations are finalized.
-
-## Advanced Usage
-
-`loadtune` supports several advanced flags to streamline your tuning experience:
-
-- **Auto-Apply (`--apply`)**: Automatically generates a `loadtune_apply.py` code snippet containing the best configuration found. You can easily import this into your project.
-- **Fast Mode (`--fast`)**: Runs tuning trials in-process instead of spawning fresh Python subprocesses. This drastically reduces trial startup overhead for workloads with massive models or datasets, but sacrifices some memory isolation.
-- **Multi-Round Tuning (`--max-rounds N`)**: Automatically repeats the tuning loop. If an input-bound bottleneck is removed, `loadtune` will profile again to catch shifting bottlenecks.
-- **Repeats (`--repeats N`)**: Measure each configuration N times. The tool will report the median throughput with min-max spread, filtering out system noise.
-- **Batch-Size Auto-Scaling (`--auto-batch`)**: When enabled, proposes larger batch sizes if GPU memory utilization is below 60% and the workload is compute-bound.
-
-## Framework Integrations
-
-loadtune provides adapters for **PyTorch Lightning** and **HuggingFace Transformers** so you don't need to write a `Workload` boilerplate file. Each adapter extracts dataset, model, optimizer, and train_step from your framework objects:
+#### Scenario A: PyTorch Lightning & HuggingFace (Zero Boilerplate)
+If you use a high-level framework, `loadtune` extracts the components for you.
 
 **PyTorch Lightning:**
 ```python
-from loadtune import from_lightning, tune
+# workloads/my_lightning.py
+from loadtune import from_lightning
 
-workload = from_lightning(my_lightning_module, datamodule=my_datamodule, batch_size=64)
-result = tune(workload, steps=50)
-print(f"Best: {result.best.knobs.label()} — {result.speedup:.2f}x")
+# ... define module and datamodule ...
+def get_workload():
+    return from_lightning(my_lightning_module, datamodule=my_datamodule, batch_size=64)
 ```
 
 **HuggingFace Transformers:**
 ```python
-from loadtune import from_hf_trainer, tune
+# workloads/my_hf.py
+from loadtune import from_hf_trainer
 
-workload = from_hf_trainer(model, dataset, tokenizer=tokenizer, batch_size=32)
-result = tune(workload, steps=50)
+# ... define model and dataset ...
+def get_workload():
+    return from_hf_trainer(model, dataset, tokenizer=tokenizer, batch_size=32)
 ```
 
-Install the optional dependencies:
+Run via CLI using fast-mode (in-process trials to avoid framework import overhead):
 ```bash
-pip install -e ".[lightning]"   # PyTorch Lightning
-pip install -e ".[nlp]"         # HuggingFace Transformers
-pip install -e ".[all]"         # everything
+loadtune tune workloads/my_lightning.py --fast
 ```
 
-See [`workloads/lightning_cifar10.py`](workloads/lightning_cifar10.py) and [`workloads/hf_sentiment.py`](workloads/hf_sentiment.py) for full examples.
+#### Scenario B: Native PyTorch (`Workload` API)
+If writing custom PyTorch loops, define a `Workload` dataclass that tells `loadtune` how to build your dataset, model, and execute a single training step. See `workloads/synthetic_bottleneck.py` for a full example.
 
-### Framework Integration Results
-
-Tuning the provided examples (on a Colab T4 GPU) reveals how `loadtune` handles different architectural bottlenecks:
-
-- **Lightning CNN (CIFAR-10):** 95.7% data wait (highly input-bound). `loadtune` scaled to `workers=4` with persistent workers, achieving a **4.25x speedup** (1,477 → 6,279 samples/s).
-- **HuggingFace DistilBERT (SST-2):** 5.9% data wait (highly compute-bound). `loadtune` correctly identified this, only applying a mild nudge to `workers=2` alongside `pin_memory` and `non_blocking` for a free **1.06x speedup** without wasting time testing massive worker counts.
-
-
-## Python API
-
-For programmatic use (notebooks, scripts, CI), use `profile()` and `tune()` directly — no CLI required:
-
+#### Scenario C: The Python API (Notebooks & CI)
+You can profile and tune directly from Python scripts without using the CLI:
 ```python
-from loadtune import Workload, profile, tune
+from loadtune import tune
+from loadtune.workload import load_workload
 
-# Profile a workload
-result = profile(my_workload, steps=50)
-print(f"Throughput: {result.throughput:.1f} samples/s, data wait: {result.data_wait_frac:.1%}")
-print(f"GPU memory: {result.gpu_mem_utilization:.0%}" if result.gpu_mem_utilization else "")
+# Load and tune a workload autonomously
+workload = load_workload("workloads/my_workload.py")
+result = tune(workload, steps=50, max_trials=6, auto_batch=True)
 
-# Tune a workload
-result = tune(my_workload, steps=50, max_trials=6, auto_batch=True)
-print(f"Best: {result.best.knobs.label()} — {result.speedup:.2f}x baseline")
+print(f"Best Config: {result.best.knobs.label()} — {result.speedup:.2f}x baseline")
 print(result.diagnosis)
 ```
 
-## Use as an AI Agent Skill (Claude Code & Antigravity)
+---
 
-`loadtune` is designed to be fully compatible with AI assistants that support native CLI interactions, meaning you can plug it directly into agents like Claude Code or Google Antigravity to act as an autonomous performance engineering skill.
+## Advanced Features
 
-> [!IMPORTANT]
-> **The skill file is not standalone.** [`SKILL.md`](skills/loadtune/SKILL.md) is a *prompt document* that teaches an AI agent which `loadtune` CLI commands to run and how to interpret their output. It does **not** contain the profiling or tuning logic itself — that lives in the pip-installable `loadtune` package. You must install the package first:
-> ```bash
-> pip install -e ".[all]"  # or pip install loadtune
-> ```
-> Then register the skill with your agent (see below). The agent will call `loadtune profile` and `loadtune tune` as CLI commands under the hood.
+- **Auto-Batching (`--auto-batch`)**: If you are compute-bound but your GPU memory utilization is low, `loadtune` autonomously proposes batch-size doubling until you hit ~80% VRAM utilization. Catches OOMs gracefully.
+- **Auto-Apply (`--apply`)**: Generates a `loadtune_apply.py` code snippet containing the best configuration found so you can easily import it into your project.
+- **Fast Mode (`--fast`)**: Runs trials in-process instead of spawning fresh subprocesses. Drastically reduces trial startup overhead for massive models.
+- **Loss Parity Check**: Dynamically verifies that semantics-changing configurations (like precision or batch size) don't break mathematical convergence.
 
-### Why use this?
-Instead of manually writing verbose PyTorch profiler code, guessing `num_workers` values, and staring at unreadable JSON traces, you can simply point your AI assistant at your codebase and ask: *"Why is my PyTorch script training so slowly?"*
+---
 
-The AI will use `loadtune` to:
-1. **Diagnose**: Automatically run the script and mathematically prove if your GPU is starving due to a data-wait bottleneck.
-2. **Cure**: Propose isolated trial experiments (e.g., testing 2 vs. 4 vs. 8 workers via the `--knobs` flag), run them in the background to measure exact throughput, and rewrite your code with the winning configuration.
+## Next Steps: The Vision
 
-A 3-hour hardware debugging chore reduced to a single prompt!
+`loadtune` is evolving into the definitive **Agentic SRE (Site Reliability Engineer)** for Machine Learning, split into two core disciplines:
 
-### Setup
+### 1. `loadtune train` (Currently Complete)
+**Goal: Optimizing GPU utilization during R&D and model training.**
+- ✅ Phase 1: Input-pipeline tuning & worker sweeping.
+- ✅ Phase 2: Cloud GPU & asynchronous memory evaluation.
+- ✅ Phase 3: GPU memory profiling & automatic batch-scaling.
+- ✅ Phase 4: Framework adapters (Lightning, HuggingFace).
 
-**Step 1 — Install the package** (required):
-```bash
-pip install -e ".[all]"
-```
-
-**Step 2 — Register the skill** with your agent:
-
-**For Claude Code:**
-```bash
-claude "Read skills/loadtune/SKILL.md and then optimize my workloads/resnet50_cifar.py script."
-```
-
-**For Google Antigravity:**
-```bash
-mkdir -p ~/.gemini/config/skills/loadtune
-cp skills/loadtune/SKILL.md ~/.gemini/config/skills/loadtune/SKILL.md
-```
-Then, Antigravity will automatically understand how to use `loadtune` whenever you ask it to profile or tune PyTorch workloads.
-
-## Troubleshooting
-
-- **Out of Memory (OOM) during trials:** If a trial proposes `num_workers=8` and crashes, `loadtune` will gracefully catch the `-9` SIGKILL signal and mark the trial as an OOM failure. It will automatically fallback to cheaper configurations.
-- **Apple Silicon (MPS) vs CUDA:** On Apple Silicon, unified memory means `pin_memory` is a no-op, and CPU-side augmentations directly compete with the GPU for memory bandwidth. MPS workloads will often see larger gains from dataloader tuning.
-- **Slow Trial Startup:** If you notice trials taking too long to start, use the `--fast` flag, or ensure your datasets and models are pre-downloaded to avoid downloading them during every isolated subprocess.
-
-## Notes for Apple Silicon (MPS)
-
-Developed on an M2 Pro. Data-wait measurements use `torch.mps.synchronize()` so compute timings are honest. CPU-side augmentation competes with the GPU for unified-memory bandwidth, which makes dataloader bottlenecks *more* pronounced on Macs — and the wins correspondingly larger. AMP and `torch.compile` knobs are out of scope on MPS for now (limited backend support).
-
-## Roadmap
-
-- [x] Phase 1: input-pipeline tuning on Apple Silicon, validated on synthetic + ResNet-50/CIFAR-10 (see [Results](#results-phase-1-apple-m2-pro-10-cores-mps))
-- [x] Repeated measurements: `--repeats N` reports median throughput with min–max spread
-- [x] Heuristic vs LLM brain comparison, incl. ceiling-aware trial budgeting in the LLM prompt
-- [x] Joint knobs, first instance: `num_workers` × `torch.set_num_threads`
-- [x] Interactive HTML report (`--html`)
-- [x] Phase 2: NVIDIA cloud GPU evaluation — 5x speedup on Food101/A100 (see [Results](#results-phase-2-nvidia-a100-12-vcpus-cuda))
-- [x] Compute-bound family: AMP, `torch.compile`, `channels_last`, fused optimizers (CUDA)
-- [x] Multi-round tuning (`--max-rounds`)
-- [x] `non_blocking` copies knob (CUDA, pairs with pin_memory)
-- [x] Accuracy-parity check (fixed-step loss comparison) for semantics-changing knobs
-- [x] Persist raw trial data (`--save-raw`) so reports can be regenerated without re-running
-- [x] Auto-apply (`--apply` generates a configuration snippet)
-- [x] Phase 3: GPU memory profiling, batch-size auto-scaling (`--auto-batch`), OOM recovery
-- [x] Phase 4: Framework integrations (PyTorch Lightning, HuggingFace Trainer) + Python API
+### 2. `loadtune serve` (Upcoming Phase 5)
+**Goal: Optimizing server costs in production inference workloads.**
+- **The Challenge:** Maximize throughput (Requests/sec) without violating strict latency SLAs (e.g., p99 latency < 100ms).
+- **The Strategy:** Agentic tuning of inference engines (vLLM, Triton, TorchServe).
+- **The Knobs:** Autonomously tuning dynamic batching windows, KV-cache block sizes, quantization precision, and maximum concurrency limits based on synthetic HTTP traffic profiling.
 
 ## License
-
 MIT
