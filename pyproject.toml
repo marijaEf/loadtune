@@ -24,6 +24,7 @@ vision = ["torchvision"]
 nlp = ["transformers", "datasets"]
 lightning = ["lightning>=2.0"]
 test = ["pytest"]
+dev = ["loadtune[vision,nlp,lightning,test]"]
 all = ["loadtune[vision,nlp,lightning,test]"]
 
 [project.scripts]
@@ -31,3 +32,7 @@ loadtune = "loadtune.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/loadtune"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

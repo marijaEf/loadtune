@@ -60,7 +60,7 @@ If you use a high-level framework, `loadtune` extracts the components for you.
 
 **PyTorch Lightning:**
 ```python
-# workloads/my_lightning.py
+# examples/my_lightning.py
 from loadtune import from_lightning
 
 # ... define module and datamodule ...
@@ -70,7 +70,7 @@ def get_workload():
 
 **HuggingFace Transformers:**
 ```python
-# workloads/my_hf.py
+# examples/my_hf.py
 from loadtune import from_hf_trainer
 
 # ... define model and dataset ...
@@ -80,11 +80,11 @@ def get_workload():
 
 Run via CLI using fast-mode (in-process trials to avoid framework import overhead):
 ```bash
-loadtune tune workloads/my_lightning.py --fast
+loadtune tune examples/my_lightning.py --fast
 ```
 
 #### Scenario B: Native PyTorch (`Workload` API)
-If writing custom PyTorch loops, define a `Workload` dataclass that tells `loadtune` how to build your dataset, model, and execute a single training step. See `workloads/synthetic_bottleneck.py` for a full example.
+If writing custom PyTorch loops, define a `Workload` dataclass that tells `loadtune` how to build your dataset, model, and execute a single training step. See `examples/synthetic_bottleneck.py` for a full example.
 
 #### Scenario C: The Python API (Notebooks & CI)
 You can profile and tune directly from Python scripts without using the CLI:
@@ -93,7 +93,7 @@ from loadtune import tune
 from loadtune.workload import load_workload
 
 # Load and tune a workload autonomously
-workload = load_workload("workloads/my_workload.py")
+workload = load_workload("examples/my_workload.py")
 result = tune(workload, steps=50, max_trials=6, auto_batch=True)
 
 print(f"Best Config: {result.best.knobs.label()} — {result.speedup:.2f}x baseline")

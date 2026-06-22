@@ -17,3 +17,13 @@ test_report*.png
 loadtune_report*
 resnet_report*
 
+# Generated reports & run artifacts
+offline_report*
+raw.json
+results/
+runs/
+.pytest_cache/
+
+# Generated apply snippet
+examples/loadtune_apply.py
+

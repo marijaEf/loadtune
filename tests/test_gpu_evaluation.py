@@ -46,7 +46,7 @@ def run_loadtune_tune(workload_path: str, tmp_path: Path):
 
 def test_dle_resnet50_improves_throughput(tmp_path):
     """Validates that loadtune can optimize a heavy ResNet-50 pipeline."""
-    workload_path = "workloads/dle_resnet50.py"
+    workload_path = "examples/dle_resnet50.py"
     
     baseline_tp, best_tp = run_loadtune_tune(workload_path, tmp_path)
     
@@ -58,7 +58,7 @@ def test_dle_resnet50_improves_throughput(tmp_path):
 
 def test_dle_bert_improves_throughput(tmp_path):
     """Validates that loadtune can navigate the artificial 5ms NLP tokenization delay."""
-    workload_path = "workloads/dle_bert.py"
+    workload_path = "examples/dle_bert.py"
     
     baseline_tp, best_tp = run_loadtune_tune(workload_path, tmp_path)
     
