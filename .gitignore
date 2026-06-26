@@ -27,3 +27,5 @@ runs/
 # Generated apply snippet
 examples/loadtune_apply.py
 
+# QA docs
+docs/demo_qa.md
