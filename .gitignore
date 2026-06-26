@@ -29,3 +29,6 @@ examples/loadtune_apply.py
 
 # QA docs
 docs/demo_qa.md
+
+# Demo notebooks
+loadtune_demo.ipynb
