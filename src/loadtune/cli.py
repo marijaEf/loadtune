@@ -1,7 +1,7 @@
 """loadtune CLI.
 
   loadtune profile examples/resnet50_cifar.py
-  loadtune tune    examples/resnet50_cifar.py --brain auto --out report.md
+  loadtune tune    examples/resnet50_cifar.py --out report.md
 """
 
 from __future__ import annotations
